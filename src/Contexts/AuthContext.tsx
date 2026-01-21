@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // Note: We use the /me endpoint which is protected by authenticateToken
       const response = await axios.get<AuthResponse>(
-        `${baseURL}/api/v1/auth/me`
+        `/api/v1/auth/me`
       );
 
       if (response.data.success && response.data.user) {
@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       const response = await axios.post<AuthResponse>(
-        `${baseURL}/api/v1/auth/login`,
+        `/api/v1/auth/login`,
         { email, password }
       );
 
