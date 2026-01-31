@@ -105,6 +105,9 @@ const Login: React.FC<LoginProps> = ({
       } catch (error: any) {
         // Close loading alert if still open
         Swal.close();
+
+        console.log(error);
+        
         
         // Error alert
         await Swal.fire({
