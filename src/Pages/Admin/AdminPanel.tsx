@@ -80,6 +80,8 @@ const AdminPanel: React.FC = () => {
         setUsers(response.data.users);
       }
     } catch (error: any) {
+      console.log(error);
+      
       Swal.fire({
         icon: 'error',
         title: 'Error',
