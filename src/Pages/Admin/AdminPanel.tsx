@@ -81,7 +81,6 @@ const AdminPanel: React.FC = () => {
       }
     } catch (error: any) {
       console.log(error);
-      
       Swal.fire({
         icon: 'error',
         title: 'Error',

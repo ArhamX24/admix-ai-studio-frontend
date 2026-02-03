@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import AvatarModal from '../../Components/AvatarModal';
 import useDebounce from '../../hooks/useDebounce';
+import { baseURL } from '@/Utils/URL';
 
 interface Avatar {
     avatar_id: string;
@@ -58,7 +59,7 @@ const AvatarPage = () => {
             });
 
             const response = await axios.get(
-                `http://localhost:8080/api/v1/video/fetch-avatars?${queryParams}`,
+                `${baseURL}/api/v1/video/fetch-avatars?${queryParams}`,
                 { withCredentials: true }
             );
 
@@ -77,7 +78,7 @@ const AvatarPage = () => {
     const fetchVoicesData = useCallback(async () => {
         try {
             const response = await axios.get(
-                "http://localhost:8080/api/v1/speech/voices/existing",
+                `${baseURL}/api/v1/speech/voices/existing`,
                 { withCredentials: true }
             );
 
