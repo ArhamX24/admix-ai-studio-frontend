@@ -31,6 +31,7 @@ const Sidebar: React.FC = () => {
     if (user.role === 'ADMIN' || user.assignedRole === 'ADMIN') {
       return [
         { icon: Settings, label: 'Admin Panel', path: '/admin-panel' },
+        { icon: Newspaper, label: 'AI News', path: '/ai-news'},
         { icon: Newspaper, label: 'News Agent', path: '/news-agent', role: 'NEWS_GENERATOR' },
         { icon: Megaphone, label: 'Voice Over Agent', path: '/voice-over-agent', role: 'AUDIO_GENERATOR' },
         { icon: FileText, label: 'Script Writer', path: '/script-writer', role: 'SCRIPT_WRITER' },

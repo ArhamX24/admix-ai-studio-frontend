@@ -41,7 +41,7 @@ const getRoleRedirectPath = (role: string | null): string => {
     case 'VIDEO_GENERATOR': return '/video-agent';
     case 'AUDIO_GENERATOR': return '/voice-over-agent';
     case 'NEWS_GENERATOR': return '/news-agent';
-    case 'ADMIN': return '/news-agent';
+    case 'ADMIN': return '/ai-news';
     default: return '/news-agent';
   }
 };
@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // Note: We use the /me endpoint which is protected by authenticateToken
       const response = await axios.get<AuthResponse>(
-        `${baseURL}/api/v1/auth/me`
+        `/api/v1/auth/me`
       );
 
       if (response.data.success && response.data.user) {

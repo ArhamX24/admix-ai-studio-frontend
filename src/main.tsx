@@ -18,6 +18,7 @@ import ProtectedRoute from './Components/ProtectedRoute.tsx';
 import { AuthProvider } from './Contexts/AuthContext.tsx';
 import AdminPanel from './Pages/Admin/AdminPanel.tsx';
 import AvatarPage from './Pages/User/AvatarPage.tsx';
+import AiNewsPage from './Pages/User/AiNewsPage.tsx';
 
 const AppRouter = createBrowserRouter([
   {
@@ -29,6 +30,10 @@ const AppRouter = createBrowserRouter([
     ),
     children: [
       { path: "/login", element: <Login /> },
+      {
+        path: "/ai-news",
+        element: <AiNewsPage/>
+      },
       {
         path: "/news-agent",
         element: (
