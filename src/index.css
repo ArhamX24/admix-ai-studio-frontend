@@ -234,6 +234,22 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* globals.css or index.css */
+.dark-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.dark-scroll::-webkit-scrollbar-track {
+  background: #18181b;
+  border-radius: 9999px;
+}
+.dark-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 9999px;
+}
+.dark-scroll::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

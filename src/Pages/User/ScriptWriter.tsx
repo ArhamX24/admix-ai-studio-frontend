@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/hooks";
 import { clearSelectedNewsIds } from "../../lib/Slice/newSelectionSlice.ts";
@@ -46,6 +46,8 @@ const SaveIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
   </svg>
 );
+
+
 
 // ── Script type selector ───────────────────────────────────────────
 const ScriptTypeSelector: React.FC<{
@@ -129,6 +131,15 @@ const ScriptBlock: React.FC<{
   onChange: (v: string) => void;
 }> = ({ label, icon, accentColor, value, onChange }) => {
   const [copied, setCopied] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // ✅ ADD
+
+  // ✅ ADD — auto-resize on value change
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [value]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -159,9 +170,18 @@ const ScriptBlock: React.FC<{
           )}
         </button>
       </div>
-      {/* Scrollable textarea area */}
-      <div className="overflow-y-auto max-h-[400px] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-zinc-900 [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+
+      {/* ✅ Scrollable div with dark scrollbar */}
+      <div
+        className="dark-scroll overflow-y-auto z-10"
+        style={{
+          maxHeight: "420px",
+          scrollbarWidth: "thin",
+          scrollbarColor: "#3f3f46 #18181b",
+        }}
+      >
         <textarea
+          ref={textareaRef}   // ✅ ADD ref
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full bg-transparent text-zinc-300 text-sm leading-7 p-5 outline-none resize-none font-mono placeholder:text-zinc-600"
@@ -169,7 +189,8 @@ const ScriptBlock: React.FC<{
           style={{
             fontFamily: "'Noto Sans Devanagari', 'Arial Unicode MS', monospace",
             minHeight: "220px",
-            height: `${Math.max(220, (value.split('\n').length + 2) * 28)}px`,
+            height: "auto",      // ✅ controlled by useEffect
+            overflow: "hidden",  // ✅ no inner scrollbar — outer div scrolls
           }}
         />
       </div>
@@ -239,7 +260,7 @@ const AIChat: React.FC<{
       </div>
 
       {/* Messages — scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-zinc-900 [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+      <div className="dark-scroll flex-1 overflow-y-auto p-4 space-y-4 min-h-0" style={{ scrollbarWidth: "thin", scrollbarColor: "#3f3f46 #18181b" }}>
         {messages.length === 0 ? (
           <div className="text-center pt-4">
             <p className="text-zinc-600 text-sm mb-4">Script mein kya change chahiye?</p>
@@ -483,6 +504,14 @@ const ScriptWriter = () => {
   // ── Editor ────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
+
+    <style>{`
+  .dark-scroll::-webkit-scrollbar { width: 5px !important; }
+  .dark-scroll::-webkit-scrollbar-track { background: #18181b !important; }
+  .dark-scroll::-webkit-scrollbar-thumb { background: #3f3f46 !important; border-radius: 9999px !important; }
+  .dark-scroll::-webkit-scrollbar-thumb:hover { background: #52525b !important; }
+`}</style>
+
       {/* Header */}
       <header className="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800/60 px-4 sm:px-6 py-3.5">
         <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
