@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { baseURL } from "@/Utils/URL";
@@ -17,8 +17,11 @@ interface NewsItem {
   category: string;
   keywords: string[];
   pubDate?: string;
-  createdAt?: string; 
+  createdAt?: string;
 }
+
+// Script generation states for the selected article
+type ScriptState = "idle" | "generating" | "ready" | "error";
 
 const CATEGORIES = [
   { id: "top", label: "Top News" },
@@ -28,9 +31,8 @@ const CATEGORIES = [
   { id: "lifestyle", label: "Lifestyle" },
 ];
 
-// ── Helpers ────────────────────────────────────────────────────────
 const isWithin24Hours = (dateStr?: string): boolean => {
-  if (!dateStr) return true; // if no date, keep it
+  if (!dateStr) return true;
   return Date.now() - new Date(dateStr).getTime() < 24 * 60 * 60 * 1000;
 };
 
@@ -41,12 +43,22 @@ const CheckIcon = () => (
   </svg>
 );
 
+const SpinnerIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={`${className} animate-spin`} fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+  </svg>
+);
+
 // ── NewsCard ───────────────────────────────────────────────────────
 const NewsCard: React.FC<{
   item: NewsItem;
   isSelected: boolean;
-  onToggle: (id: string) => void;
-}> = ({ item, isSelected, onToggle }) => {
+  isAnyGenerating: boolean; // true when ANY card is currently generating
+  scriptState: ScriptState;
+  onSelect: (id: string) => void;
+  onDeselect: () => void;
+}> = ({ item, isSelected, isAnyGenerating, scriptState, onSelect, onDeselect }) => {
   const displayImage =
     item.image_url ||
     "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80";
@@ -54,6 +66,8 @@ const NewsCard: React.FC<{
   const handleOpenLink = () => {
     window.open(item.link, "_blank", "noopener,noreferrer");
   };
+
+  const isGenerating = isSelected && scriptState === "generating";
 
   return (
     <div
@@ -63,7 +77,7 @@ const NewsCard: React.FC<{
           : "border-zinc-800 hover:border-zinc-600 bg-zinc-900/80 hover:shadow-2xl hover:-translate-y-1"
       }`}
     >
-      {/* Image — click opens link */}
+      {/* Image */}
       <div
         onClick={handleOpenLink}
         className="relative h-44 w-full overflow-hidden flex-shrink-0 cursor-pointer"
@@ -75,42 +89,37 @@ const NewsCard: React.FC<{
         />
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/30 to-transparent" />
 
-        {/* Category pill */}
         <div className="absolute top-3 right-3 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
           <span className="text-xs text-zinc-300 font-medium capitalize tracking-wider">
             {item.category}
           </span>
         </div>
 
-        {/* Selected check badge */}
         {isSelected && (
           <div className="absolute top-3 left-3 w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/40">
-            <CheckIcon />
+            {isGenerating ? <SpinnerIcon className="w-3.5 h-3.5" /> : <CheckIcon />}
           </div>
         )}
       </div>
 
-      {/* Middle — title + select button */}
+      {/* Content */}
       <div className="relative flex-1 p-5 group/middle">
         <div
           className={`absolute inset-0 transition-all duration-200 ${
-            isSelected
-              ? "bg-blue-500/8"
-              : "bg-transparent group-hover/middle:bg-zinc-800/40"
+            isSelected ? "bg-blue-500/8" : "bg-transparent group-hover/middle:bg-zinc-800/40"
           }`}
         />
 
-        {/* Title + summary — click opens link */}
         <div onClick={handleOpenLink} className="relative z-10 cursor-pointer">
           <h2 className="text-zinc-100 text-sm font-bold line-clamp-2 leading-snug group-hover:text-blue-400 transition-colors mb-2">
             {item.title}
           </h2>
           <p className="text-zinc-400 text-xs leading-relaxed line-clamp-3">
-            {item.hindiSummary || item.description}
+            {item.description}
           </p>
         </div>
 
-        {/* Select / Deselect button */}
+        {/* Action button */}
         <div
           className={`relative z-10 mt-4 transition-all duration-200 ${
             isSelected
@@ -118,32 +127,49 @@ const NewsCard: React.FC<{
               : "opacity-0 translate-y-1 group-hover/middle:opacity-100 group-hover/middle:translate-y-0"
           }`}
         >
-          <button
-            onClick={() => onToggle(item.id)}
-            className={`w-full py-2 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-              isSelected
-                ? "bg-blue-500/20 text-blue-400 border border-blue-500/40 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/40"
-                : "bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20"
-            }`}
-          >
-            {isSelected ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Deselect
-              </>
-            ) : (
-              <>
-                <CheckIcon />
-                Select for Script
-              </>
-            )}
-          </button>
+          {isSelected ? (
+            // If selected, show deselect (disabled while generating)
+            <button
+              onClick={isGenerating ? undefined : onDeselect}
+              disabled={isGenerating}
+              className={`w-full py-2 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                isGenerating
+                  ? "bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed"
+                  : "bg-blue-500/20 text-blue-400 border border-blue-500/40 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/40"
+              }`}
+            >
+              {isGenerating ? (
+                <>
+                  <SpinnerIcon className="w-3.5 h-3.5" />
+                  Preparing script…
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Deselect
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => !isAnyGenerating && onSelect(item.id)}
+              disabled={isAnyGenerating}
+              className={`w-full py-2 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                isAnyGenerating
+                  ? "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20"
+              }`}
+            >
+              <CheckIcon />
+              Select for Script
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Footer — click opens link */}
+      {/* Footer */}
       <div
         onClick={handleOpenLink}
         className="px-5 pb-4 border-t border-zinc-800 pt-3 flex justify-between items-center text-xs text-zinc-500 font-medium flex-shrink-0 cursor-pointer"
@@ -165,20 +191,39 @@ const NewsCard: React.FC<{
 // ── AiNewsPage ─────────────────────────────────────────────────────
 const AiNewsPage: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // false until first fetch starts
   const [category, setCategory] = useState("top");
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Script generation state
+  const [scriptState, setScriptState] = useState<ScriptState>("idle");
+  const [generatedScript, setGeneratedScript] = useState<string | null>(null);
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const selectedNewsId = useAppSelector((s) => s.newsSelection.selectedNewsId);
-  const selectedCount = selectedNewsId ? 1 : 0;
 
-  const fetchNews = async (forceRefresh = false) => {
+  // Prevent double-fetch from React Strict Mode double-invoke
+  const fetchInFlight = useRef(false);
+
+  // ── Reset script state ─────────────────────────────────────────
+  const resetScriptState = useCallback(() => {
+    setScriptState("idle");
+    setGeneratedScript(null);
+    setScriptError(null);
+  }, []);
+
+  // ── Fetch news list ────────────────────────────────────────────
+  const fetchNews = useCallback(async (forceRefresh = false) => {
+    // Prevent concurrent fetches (React Strict Mode fires effects twice in dev)
+    if (fetchInFlight.current && !forceRefresh) return;
+    fetchInFlight.current = true;
+
     try {
       setLoading(true);
       if (forceRefresh) setIsRefreshing(true);
-      dispatch(clearSelectedNewsIds());
+      resetScriptState();
 
       const res = await axios.post(
         `${baseURL}/api/v1/morning-news-fetcher/get-morning-news`,
@@ -187,46 +232,76 @@ const AiNewsPage: React.FC = () => {
 
       const rawNews: NewsItem[] = res.data?.data || res.data?.newsData || [];
 
-      // ✅ Client-side guard: drop anything older than 24h
-      // (handles edge case where backend returns cached data near the boundary)
-      const freshNews = rawNews.filter((item) => isWithin24Hours(item.createdAt));
-
-      // ✅ If everything came back stale and it wasn't a forceRefresh, auto-refetch fresh
-      if (freshNews.length === 0 && rawNews.length > 0 && !forceRefresh) {
-        console.log("All cached news older than 24h — auto-fetching fresh batch");
-        setLoading(false);
-        setIsRefreshing(false);
-        fetchNews(true); // trigger a real fresh fetch
-        return;
-      }
-
-      setNews(freshNews);
+      // Show whatever the backend returns — do NOT auto-force-refresh client-side.
+      // The backend already handles the 24h cache check correctly.
+      // Auto-refreshing here caused a double fetch loop on first mount.
+      setNews(rawNews);
     } catch (error) {
       console.error("Failed to fetch news:", error);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
+      fetchInFlight.current = false;
     }
-  };
+  }, [category, resetScriptState]);
 
   useEffect(() => {
+    dispatch(clearSelectedNewsIds());
+    resetScriptState();
+    fetchInFlight.current = false; // reset guard on category change
     fetchNews();
-  }, [category]);
+  }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleSelect = (id: string) => {
-    dispatch(toggleNewsId(id));
-  };
+  // ── Handle article selection → trigger script generation ───────
+  const handleSelect = useCallback(async (articleId: string) => {
+    if (scriptState === "generating") return;
+    if (selectedNewsId === articleId && scriptState === "ready") return;
 
-  const handleProceed = () => {
-    if (!selectedNewsId) return;
+    // Set selection immediately — keep it regardless of API outcome.
+    // DO NOT clear on error. Clearing on error was the bug causing
+    // the card to visually deselect and the floating bar to disappear.
+    dispatch(clearSelectedNewsIds());
+    dispatch(toggleNewsId(articleId));
+
+    setScriptState("generating");
+    setGeneratedScript(null);
+    setScriptError(null);
+
+    try {
+      const res = await axios.post(
+        `${baseURL}/api/v1/morning-news-fetcher/generate-article-summary`,
+        { articleId }
+      );
+      if (res.data?.success) {
+        setGeneratedScript(res.data.data?.hindiSummary || null);
+        setScriptState("ready");
+      } else {
+        throw new Error(res.data?.message || "Script generation failed");
+      }
+    } catch (err: any) {
+      console.error("Script generation error:", err);
+      setScriptError(err?.response?.data?.message || err?.message || "Something went wrong");
+      setScriptState("error");
+      // NO clearSelectedNewsIds here — card stays selected, user sees error + retry
+    }
+  }, [scriptState, selectedNewsId, dispatch]);
+
+  // ── Handle deselect ────────────────────────────────────────────
+  const handleDeselect = useCallback(() => {
+    dispatch(clearSelectedNewsIds());
+    resetScriptState();
+  }, [dispatch, resetScriptState]);
+
+  // ── Proceed to script writer ───────────────────────────────────
+  const handleProceed = useCallback(() => {
+    if (!selectedNewsId || scriptState !== "ready") return;
     navigate("/script-writer");
-  };
+  }, [selectedNewsId, scriptState, navigate]);
 
   return (
     <div className="w-full min-h-screen p-4 sm:p-6 font-sans relative">
       {/* Header bar */}
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
-        {/* Category selector */}
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <label className="text-sm text-zinc-400 font-medium whitespace-nowrap">Category:</label>
           <div className="relative w-full sm:w-44">
@@ -247,12 +322,11 @@ const AiNewsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right side controls */}
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          {selectedCount > 0 && (
+          {selectedNewsId && (
             <div className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-500/30 rounded-xl text-blue-400 text-sm font-medium">
               <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
-                {selectedCount}
+                1
               </div>
               <span>selected</span>
             </div>
@@ -260,9 +334,12 @@ const AiNewsPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!loading && !isRefreshing) fetchNews(true);
+            onClick={() => {
+              if (loading || isRefreshing) return;
+              dispatch(clearSelectedNewsIds());
+              resetScriptState();
+              fetchInFlight.current = false; // allow forced re-fetch
+              fetchNews(true);
             }}
             disabled={loading || isRefreshing}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
@@ -273,9 +350,7 @@ const AiNewsPage: React.FC = () => {
           >
             <svg
               className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -302,7 +377,10 @@ const AiNewsPage: React.FC = () => {
                 key={item.id}
                 item={item}
                 isSelected={selectedNewsId === item.id}
-                onToggle={toggleSelect}
+                isAnyGenerating={scriptState === "generating"}
+                scriptState={selectedNewsId === item.id ? scriptState : "idle"}
+                onSelect={handleSelect}
+                onDeselect={handleDeselect}
               />
             ))
           ) : (
@@ -313,32 +391,97 @@ const AiNewsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Floating action bar */}
-      {selectedCount > 0 && (
+      {/* ── Floating action bar ───────────────────────────────────── */}
+      {selectedNewsId && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-700 rounded-2xl px-6 py-4 shadow-2xl shadow-black/60 backdrop-blur-xl">
-            <div className="text-sm text-zinc-300">
-              <span className="font-bold text-white text-lg">1</span>
-              <span className="text-zinc-400 ml-1.5">news selected</span>
-            </div>
+
+            {/* State indicator */}
+            {scriptState === "generating" && (
+              <div className="flex items-center gap-3 text-sm text-zinc-300">
+                <SpinnerIcon className="w-5 h-5 text-blue-400" />
+                <div className="flex flex-col">
+                  <span className="font-semibold text-white text-sm">Preparing your article for script…</span>
+                </div>
+              </div>
+            )}
+
+            {scriptState === "ready" && (
+              <div className="flex items-center gap-3 text-sm text-zinc-300">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+                  <CheckIcon />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-semibold text-white text-sm">Article is ready For script!</span>
+                </div>
+              </div>
+            )}
+
+            {scriptState === "error" && (
+              <div className="flex items-center gap-3 text-sm">
+                <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-semibold text-red-400 text-sm">Script generation failed</span>
+                  <span className="text-zinc-500 text-xs max-w-xs truncate">{scriptError || "Please retry"}</span>
+                </div>
+                <button
+                  onClick={() => selectedNewsId && handleSelect(selectedNewsId)}
+                  className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-semibold rounded-lg border border-red-500/30 transition-all flex-shrink-0"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {scriptState === "idle" && (
+              <div className="text-sm text-zinc-300">
+                <span className="font-bold text-white text-lg">1</span>
+                <span className="text-zinc-400 ml-1.5">news selected</span>
+              </div>
+            )}
+
             <div className="w-px h-6 bg-zinc-700" />
+
             <button
-              onClick={() => dispatch(clearSelectedNewsIds())}
-              className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+              onClick={handleDeselect}
+              disabled={scriptState === "generating"}
+              className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Clear
             </button>
+
+            {/* Generate Script button — only active when ready */}
             <button
               onClick={handleProceed}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-all hover:scale-105 shadow-lg shadow-blue-500/30"
+              disabled={scriptState !== "ready"}
+              className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all ${
+                scriptState === "ready"
+                  ? "bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 shadow-lg shadow-blue-500/30"
+                  : scriptState === "generating"
+                  ? "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+                  : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+              }`}
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Generate Script
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
+              {scriptState === "generating" ? (
+                <>
+                  <SpinnerIcon className="w-4 h-4" />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Generate Script
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </>
+              )}
             </button>
           </div>
         </div>

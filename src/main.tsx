@@ -19,6 +19,7 @@ import { AuthProvider } from './Contexts/AuthContext.tsx';
 import AdminPanel from './Pages/Admin/AdminPanel.tsx';
 import AvatarPage from './Pages/User/AvatarPage.tsx';
 import AiNewsPage from './Pages/User/AiNewsPage.tsx';
+import ThumbnailGenerationPage from './Pages/User/ThumbnailGenerationPage.tsx';
 
 const AppRouter = createBrowserRouter([
   {
@@ -103,6 +104,14 @@ const AppRouter = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['ADMIN']}>
             <AdminPanel />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: "/generate-thumbnail",
+        element: (
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ThumbnailGenerationPage/>
           </ProtectedRoute>
         )
       }, 
