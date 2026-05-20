@@ -540,6 +540,7 @@ const ThumbnailGenerationPage = () => {
         )
       );
     } catch (err: any) {
+      console.error(err)
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
@@ -603,7 +604,8 @@ const ThumbnailGenerationPage = () => {
             : m
         )
       );
-    } catch {
+    } catch (err) {
+      console.error(err);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
