@@ -516,7 +516,10 @@ const ThumbnailGenerationPage = () => {
           thumbnailType: activeType,
           channelName:  selectedChannel,   // ← new field
         },
-        { withCredentials: true }
+        { withCredentials: true,
+          timeout: 180000
+         }
+        
       );
 
       const data: ThumbnailResult = res.data.data;
@@ -584,7 +587,9 @@ const ThumbnailGenerationPage = () => {
           previousImageKey: latestThumbnail.imageKey,
           channelName:      selectedChannel,   // ← new field
         },
-        { withCredentials: true }
+        { withCredentials: true,
+          timeout: 180000
+         }
       );
 
       const data: ThumbnailResult = res.data.data;
