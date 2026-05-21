@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, memo } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { baseURL } from "@/Utils/URL";
@@ -20,7 +20,6 @@ interface NewsItem {
   createdAt?: string;
 }
 
-// Script generation states for the selected article
 type ScriptState = "idle" | "generating" | "ready" | "error";
 
 const CATEGORIES = [
@@ -31,12 +30,6 @@ const CATEGORIES = [
   { id: "lifestyle", label: "Lifestyle" },
 ];
 
-const isWithin24Hours = (dateStr?: string): boolean => {
-  if (!dateStr) return true;
-  return Date.now() - new Date(dateStr).getTime() < 24 * 60 * 60 * 1000;
-};
-
-// ── Icons ──────────────────────────────────────────────────────────
 const CheckIcon = () => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -50,15 +43,21 @@ const SpinnerIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   </svg>
 );
 
-// ── NewsCard ───────────────────────────────────────────────────────
-const NewsCard: React.FC<{
+const NewsCard = memo(({
+  item,
+  isSelected,
+  isAnyGenerating,
+  scriptState,
+  onSelect,
+  onDeselect,
+}: {
   item: NewsItem;
   isSelected: boolean;
-  isAnyGenerating: boolean; // true when ANY card is currently generating
+  isAnyGenerating: boolean;
   scriptState: ScriptState;
   onSelect: (id: string) => void;
   onDeselect: () => void;
-}> = ({ item, isSelected, isAnyGenerating, scriptState, onSelect, onDeselect }) => {
+}) => {
   const displayImage =
     item.image_url ||
     "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80";
@@ -71,30 +70,29 @@ const NewsCard: React.FC<{
 
   return (
     <div
-      className={`group flex flex-col rounded-2xl overflow-hidden backdrop-blur-md border shadow-lg transition-all duration-300 ${
+      className={`group flex flex-col rounded-2xl overflow-hidden border shadow-lg transition-colors duration-300 transform-gpu ${
         isSelected
-          ? "border-blue-500 shadow-blue-500/20 bg-zinc-900/90"
-          : "border-zinc-800 hover:border-zinc-600 bg-zinc-900/80 hover:shadow-2xl hover:-translate-y-1"
+          ? "border-blue-500 shadow-blue-500/20 bg-zinc-900"
+          : "border-zinc-800 hover:border-zinc-600 bg-[#18181b] hover:shadow-2xl"
       }`}
     >
-      {/* Image */}
       <div
         onClick={handleOpenLink}
-        className="relative h-44 w-full overflow-hidden flex-shrink-0 cursor-pointer"
+        className="relative h-44 w-full overflow-hidden flex-shrink-0 cursor-pointer bg-zinc-800"
       >
         <img
           src={displayImage}
           alt={item.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-in-out"
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-in-out transform-gpu will-change-transform"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/30 to-transparent" />
-
-        <div className="absolute top-3 right-3 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10">
+        <div className="absolute top-3 right-3 px-3 py-1 bg-black/80 rounded-full border border-white/10">
           <span className="text-xs text-zinc-300 font-medium capitalize tracking-wider">
             {item.category}
           </span>
         </div>
-
         {isSelected && (
           <div className="absolute top-3 left-3 w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/40">
             {isGenerating ? <SpinnerIcon className="w-3.5 h-3.5" /> : <CheckIcon />}
@@ -102,14 +100,12 @@ const NewsCard: React.FC<{
         )}
       </div>
 
-      {/* Content */}
       <div className="relative flex-1 p-5 group/middle">
         <div
           className={`absolute inset-0 transition-all duration-200 ${
-            isSelected ? "bg-blue-500/8" : "bg-transparent group-hover/middle:bg-zinc-800/40"
+            isSelected ? "bg-blue-500/5" : "bg-transparent group-hover/middle:bg-zinc-800/40"
           }`}
         />
-
         <div onClick={handleOpenLink} className="relative z-10 cursor-pointer">
           <h2 className="text-zinc-100 text-sm font-bold line-clamp-2 leading-snug group-hover:text-blue-400 transition-colors mb-2">
             {item.title}
@@ -118,8 +114,6 @@ const NewsCard: React.FC<{
             {item.description}
           </p>
         </div>
-
-        {/* Action button */}
         <div
           className={`relative z-10 mt-4 transition-all duration-200 ${
             isSelected
@@ -128,7 +122,6 @@ const NewsCard: React.FC<{
           }`}
         >
           {isSelected ? (
-            // If selected, show deselect (disabled while generating)
             <button
               onClick={isGenerating ? undefined : onDeselect}
               disabled={isGenerating}
@@ -139,10 +132,7 @@ const NewsCard: React.FC<{
               }`}
             >
               {isGenerating ? (
-                <>
-                  <SpinnerIcon className="w-3.5 h-3.5" />
-                  Preparing script…
-                </>
+                <><SpinnerIcon className="w-3.5 h-3.5" />Preparing script…</>
               ) : (
                 <>
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -169,7 +159,6 @@ const NewsCard: React.FC<{
         </div>
       </div>
 
-      {/* Footer */}
       <div
         onClick={handleOpenLink}
         className="px-5 pb-4 border-t border-zinc-800 pt-3 flex justify-between items-center text-xs text-zinc-500 font-medium flex-shrink-0 cursor-pointer"
@@ -177,25 +166,24 @@ const NewsCard: React.FC<{
         <span className="truncate pr-4">{item.source_name || "News Source"}</span>
         <svg
           className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 text-blue-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
         </svg>
       </div>
     </div>
   );
-};
+});
 
-// ── AiNewsPage ─────────────────────────────────────────────────────
+NewsCard.displayName = "NewsCard";
+
+// ── AiNewsPage ────────────────────────────────────────────────────
 const AiNewsPage: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(false); // false until first fetch starts
+  const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("top");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Script generation state
   const [scriptState, setScriptState] = useState<ScriptState>("idle");
   const [generatedScript, setGeneratedScript] = useState<string | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
@@ -204,19 +192,19 @@ const AiNewsPage: React.FC = () => {
   const dispatch = useAppDispatch();
   const selectedNewsId = useAppSelector((s) => s.newsSelection.selectedNewsId);
 
-  // Prevent double-fetch from React Strict Mode double-invoke
+  // Tracks whether a fetch is currently in-flight to prevent duplicates
   const fetchInFlight = useRef(false);
 
-  // ── Reset script state ─────────────────────────────────────────
   const resetScriptState = useCallback(() => {
     setScriptState("idle");
     setGeneratedScript(null);
     setScriptError(null);
   }, []);
 
-  // ── Fetch news list ────────────────────────────────────────────
-  const fetchNews = useCallback(async (forceRefresh = false) => {
-    // Prevent concurrent fetches (React Strict Mode fires effects twice in dev)
+  // FIX: fetchNews does NOT depend on `category` — it receives it as a parameter.
+  // This breaks the stale-closure problem entirely: the function ref never changes,
+  // so it can't accidentally trigger the second useEffect.
+  const fetchNews = useCallback(async (categoryToFetch: string, forceRefresh = false) => {
     if (fetchInFlight.current && !forceRefresh) return;
     fetchInFlight.current = true;
 
@@ -227,14 +215,10 @@ const AiNewsPage: React.FC = () => {
 
       const res = await axios.post(
         `${baseURL}/api/v1/morning-news-fetcher/get-morning-news`,
-        { category, forceRefresh }
+        { category: categoryToFetch, forceRefresh }
       );
 
       const rawNews: NewsItem[] = res.data?.data || res.data?.newsData || [];
-
-      // Show whatever the backend returns — do NOT auto-force-refresh client-side.
-      // The backend already handles the 24h cache check correctly.
-      // Auto-refreshing here caused a double fetch loop on first mount.
       setNews(rawNews);
     } catch (error) {
       console.error("Failed to fetch news:", error);
@@ -243,23 +227,28 @@ const AiNewsPage: React.FC = () => {
       setIsRefreshing(false);
       fetchInFlight.current = false;
     }
-  }, [category, resetScriptState]);
+  }, [resetScriptState]); // resetScriptState is stable (no deps), so fetchNews is effectively stable too
 
+  // FIX: Single useEffect. Passes current category directly as argument — no closure capture issue.
+  // Cleanup resets the in-flight guard so a quick category switch doesn't permanently block fetching.
   useEffect(() => {
     dispatch(clearSelectedNewsIds());
     resetScriptState();
-    fetchInFlight.current = false; // reset guard on category change
-    fetchNews();
-  }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchInFlight.current = false; // reset guard on category change before starting new fetch
+    fetchNews(category);
 
-  // ── Handle article selection → trigger script generation ───────
+    return () => {
+      // If category changes mid-fetch, mark it as done so the next fetch isn't blocked
+      fetchInFlight.current = false;
+    };
+  }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Intentionally omitting fetchNews/dispatch/resetScriptState — all are stable refs.
+  // Including them would cause the effect to re-run unnecessarily.
+
   const handleSelect = useCallback(async (articleId: string) => {
     if (scriptState === "generating") return;
     if (selectedNewsId === articleId && scriptState === "ready") return;
 
-    // Set selection immediately — keep it regardless of API outcome.
-    // DO NOT clear on error. Clearing on error was the bug causing
-    // the card to visually deselect and the floating bar to disappear.
     dispatch(clearSelectedNewsIds());
     dispatch(toggleNewsId(articleId));
 
@@ -282,21 +271,26 @@ const AiNewsPage: React.FC = () => {
       console.error("Script generation error:", err);
       setScriptError(err?.response?.data?.message || err?.message || "Something went wrong");
       setScriptState("error");
-      // NO clearSelectedNewsIds here — card stays selected, user sees error + retry
     }
   }, [scriptState, selectedNewsId, dispatch]);
 
-  // ── Handle deselect ────────────────────────────────────────────
   const handleDeselect = useCallback(() => {
     dispatch(clearSelectedNewsIds());
     resetScriptState();
   }, [dispatch, resetScriptState]);
 
-  // ── Proceed to script writer ───────────────────────────────────
   const handleProceed = useCallback(() => {
     if (!selectedNewsId || scriptState !== "ready") return;
     navigate("/script-writer");
   }, [selectedNewsId, scriptState, navigate]);
+
+  const handleRefresh = useCallback(() => {
+    if (loading || isRefreshing) return;
+    dispatch(clearSelectedNewsIds());
+    resetScriptState();
+    fetchInFlight.current = false;
+    fetchNews(category, true);
+  }, [loading, isRefreshing, category, dispatch, resetScriptState, fetchNews]);
 
   return (
     <div className="w-full min-h-screen p-4 sm:p-6 font-sans relative">
@@ -325,22 +319,14 @@ const AiNewsPage: React.FC = () => {
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
           {selectedNewsId && (
             <div className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-500/30 rounded-xl text-blue-400 text-sm font-medium">
-              <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
-                1
-              </div>
+              <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">1</div>
               <span>selected</span>
             </div>
           )}
 
           <button
             type="button"
-            onClick={() => {
-              if (loading || isRefreshing) return;
-              dispatch(clearSelectedNewsIds());
-              resetScriptState();
-              fetchInFlight.current = false; // allow forced re-fetch
-              fetchNews(true);
-            }}
+            onClick={handleRefresh}
             disabled={loading || isRefreshing}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               loading || isRefreshing
@@ -391,12 +377,10 @@ const AiNewsPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Floating action bar ───────────────────────────────────── */}
+      {/* Floating action bar */}
       {selectedNewsId && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-700 rounded-2xl px-6 py-4 shadow-2xl shadow-black/60 backdrop-blur-xl">
-
-            {/* State indicator */}
             {scriptState === "generating" && (
               <div className="flex items-center gap-3 text-sm text-zinc-300">
                 <SpinnerIcon className="w-5 h-5 text-blue-400" />
@@ -412,7 +396,7 @@ const AiNewsPage: React.FC = () => {
                   <CheckIcon />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-semibold text-white text-sm">Article is ready For script!</span>
+                  <span className="font-semibold text-white text-sm">Article is ready for script!</span>
                 </div>
               </div>
             )}
@@ -454,23 +438,17 @@ const AiNewsPage: React.FC = () => {
               Clear
             </button>
 
-            {/* Generate Script button — only active when ready */}
             <button
               onClick={handleProceed}
               disabled={scriptState !== "ready"}
               className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all ${
                 scriptState === "ready"
                   ? "bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 shadow-lg shadow-blue-500/30"
-                  : scriptState === "generating"
-                  ? "bg-zinc-700 text-zinc-500 cursor-not-allowed"
                   : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
               }`}
             >
               {scriptState === "generating" ? (
-                <>
-                  <SpinnerIcon className="w-4 h-4" />
-                  Generating…
-                </>
+                <><SpinnerIcon className="w-4 h-4" />Generating…</>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
