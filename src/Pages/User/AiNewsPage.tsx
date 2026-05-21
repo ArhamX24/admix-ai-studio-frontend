@@ -132,7 +132,7 @@ const NewsCard = memo(({
               }`}
             >
               {isGenerating ? (
-                <><SpinnerIcon className="w-3.5 h-3.5" />Preparing script…</>
+                <><SpinnerIcon className="w-3.5 h-3.5" />Preparing for script…</>
               ) : (
                 <>
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
