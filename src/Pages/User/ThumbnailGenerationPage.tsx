@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Send, Download, Loader2, Sparkles, RefreshCw,
   ArrowLeft, Wand2, Bot, User, ImageIcon, Zap,
-  Youtube, Play, ChevronDown, Check, Tv2,
+  Youtube, Play, ChevronDown, Check, Tv2, Plus, X
 } from 'lucide-react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { baseURL } from '@/Utils/URL';
+
+// Make sure these paths match your folder structure
 import BBmix   from "../../Logos/BB MIX LOGO.png";
 import BBstory from "../../Logos/BB STORY LOGO.png";
 import PDNnews from "../../Logos/PDN NEWS LOGO.png";
@@ -16,7 +18,7 @@ import Ycity   from "../../Logos/YCITY LOGO.png";
 
 const API_BASE = `${baseURL}/api/v1/thumbnail`;
 
-// ── Channel config ───────────────────────────────────────────────
+// ── Types & Constants ───────────────────────────────────────────────
 const CHANNELS = [
   { id: 'bbmix',   label: 'BB Mix',   logo: BBmix   },
   { id: 'bbstory', label: 'BB Story', logo: BBstory },
@@ -57,24 +59,17 @@ interface ThumbnailResult {
   changes?: string;
 }
 
-// ── Suggestion chips ─────────────────────────────────────────────
-const suggestions = [
-  '🔥 More dramatic',
-  '📰 Breaking news style',
-  '⚡ High energy composition',
-  '🎬 Cinematic lighting',
-];
+const suggestions = [""];
 
-// ── Typing dots ──────────────────────────────────────────────────
-const TypingDots = () => (
-  <div className="flex items-center gap-1.5 py-0.5 px-1">
-    {[0, 1, 2].map((i) => (
-      <div
-        key={i}
-        className="w-2 h-2 rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-400 animate-bounce"
-        style={{ animationDelay: `${i * 0.18}s`, animationDuration: '0.9s' }}
-      />
-    ))}
+// ── Custom ChatGPT Style Loader ──────────────────────────────────
+const ChatGptLoader = ({ isYoutube }: { isYoutube: boolean }) => (
+  <div className={`relative flex items-center justify-center rounded-2xl overflow-hidden bg-zinc-900 border border-white/5 shadow-2xl mt-2 ${isYoutube ? 'w-[300px] aspect-video' : 'w-[220px] aspect-square'}`}>
+    <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 to-fuchsia-500/10 animate-pulse" />
+    <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.04),transparent)] -translate-x-full animate-[shimmer_1.5s_infinite]" />
+    <div className="flex flex-col items-center gap-3 relative z-10">
+      <div className="w-8 h-8 rounded-full border-2 border-violet-500/20 border-t-violet-400 animate-spin" />
+      <span className="text-zinc-400 text-[10px] font-semibold tracking-widest uppercase">Creating Graphic...</span>
+    </div>
   </div>
 );
 
@@ -88,7 +83,6 @@ const ChannelDropdown: React.FC<{
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selected = CHANNELS.find((c) => c.id === value);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -100,65 +94,38 @@ const ChannelDropdown: React.FC<{
   }, []);
 
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative z-50">
       <button
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-2 bg-zinc-900/80 border transition-all rounded-xl ${
-          open
-            ? 'border-violet-500/50 shadow-lg shadow-violet-500/10'
-            : 'border-white/10 hover:border-white/20'
+          open ? 'border-violet-500/50 shadow-lg shadow-violet-500/10' : 'border-white/10 hover:border-white/20'
         } ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2.5'}`}
       >
         {selected ? (
           <>
-            <img
-              src={selected.logo}
-              alt={selected.label}
-              className={`object-contain rounded ${compact ? 'w-4 h-4' : 'w-5 h-5'}`}
-            />
-            <span className={`text-zinc-200 font-semibold whitespace-nowrap ${compact ? 'text-[10px]' : 'text-xs'}`}>
-              {selected.label}
-            </span>
+            <img src={selected.logo} alt={selected.label} className={`object-contain rounded ${compact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+            <span className={`text-zinc-200 font-semibold whitespace-nowrap ${compact ? 'text-[10px]' : 'text-xs'}`}>{selected.label}</span>
           </>
         ) : (
           <>
             <Tv2 className={`text-zinc-500 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
-            <span className={`text-zinc-500 whitespace-nowrap ${compact ? 'text-[10px]' : 'text-xs'}`}>
-              Select Channel
-            </span>
+            <span className={`text-zinc-500 whitespace-nowrap ${compact ? 'text-[10px]' : 'text-xs'}`}>Select Channel</span>
           </>
         )}
-        <ChevronDown
-          className={`text-zinc-500 transition-transform duration-200 ${open ? 'rotate-180' : ''} ${
-            compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
-          }`}
-        />
+        <ChevronDown className={`text-zinc-500 transition-transform duration-200 ${open ? 'rotate-180' : ''} ${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'}`} />
       </button>
 
       {open && (
-        <div
-          className="absolute top-full mt-1.5 left-0 min-w-[160px] bg-zinc-950 border border-white/10 rounded-xl overflow-hidden shadow-2xl shadow-black/60 z-50"
-          style={{ animation: 'fadeSlideUp 0.15s ease forwards' }}
-        >
+        <div className="absolute top-full mt-1.5 left-0 min-w-[160px] bg-zinc-950 border border-white/10 rounded-xl overflow-hidden shadow-2xl">
           {CHANNELS.map((ch) => (
             <button
               key={ch.id}
               onClick={() => { onChange(ch.id); setOpen(false); }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-zinc-800/80 transition-all text-left group ${
-                value === ch.id ? 'bg-zinc-800/60' : ''
-              }`}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-zinc-800/80 transition-all text-left ${value === ch.id ? 'bg-zinc-800/60' : ''}`}
             >
-              <img
-                src={ch.logo}
-                alt={ch.label}
-                className="w-5 h-5 object-contain rounded flex-shrink-0"
-              />
+              <img src={ch.logo} alt={ch.label} className="w-5 h-5 object-contain rounded flex-shrink-0" />
               <span className="text-zinc-200 text-xs font-medium flex-1">{ch.label}</span>
-              {value === ch.id ? (
-                <Check className="w-3 h-3 text-violet-400 flex-shrink-0" />
-              ) : (
-                <div className="w-3 h-3 flex-shrink-0" />
-              )}
+              {value === ch.id ? <Check className="w-3 h-3 text-violet-400 flex-shrink-0" /> : <div className="w-3 h-3 flex-shrink-0" />}
             </button>
           ))}
         </div>
@@ -167,7 +134,7 @@ const ChannelDropdown: React.FC<{
   );
 };
 
-// ── Type selector screen ─────────────────────────────────────────
+// ── Type Selector Screen ─────────────────────────────────────────
 const TypeSelector: React.FC<{
   onSelect: (type: ThumbnailType) => void;
   script: ScriptState;
@@ -180,33 +147,17 @@ const TypeSelector: React.FC<{
       <p className="text-zinc-600 text-xs">Pick format and channel before generating</p>
     </div>
 
-    {/* Channel selector */}
-    <div className="w-full max-w-sm">
-      <p className="text-zinc-500 text-[10px] uppercase font-semibold tracking-wide mb-2 px-1">
-        Channel / Brand
-      </p>
+    <div className="w-full max-w-sm relative z-50">
+      <p className="text-zinc-500 text-[10px] uppercase font-semibold tracking-wide mb-2 px-1">Channel / Brand</p>
       <div className="flex justify-start">
         <ChannelDropdown value={selectedChannel} onChange={onChannelChange} />
       </div>
-      {!selectedChannel && (
-        <p className="text-amber-500/70 text-[10px] mt-1.5 px-1">
-          ⚠ Select a channel to embed its logo on the thumbnail
-        </p>
-      )}
-      {selectedChannel && (
-        <p className="text-emerald-500/70 text-[10px] mt-1.5 px-1">
-          ✓ Logo will be placed in the top-right corner
-        </p>
-      )}
+      {!selectedChannel && <p className="text-amber-500/70 text-[10px] mt-1.5 px-1">⚠ Select a channel to embed its logo on the thumbnail</p>}
+      {selectedChannel && <p className="text-emerald-500/70 text-[10px] mt-1.5 px-1">✓ Logo will be placed in the top-right corner</p>}
     </div>
 
-    {/* Format buttons */}
-    <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
-      {/* YouTube */}
-      <button
-        onClick={() => onSelect('youtube')}
-        className="group flex flex-col items-center gap-3 p-5 bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/8 hover:border-red-500/40 rounded-2xl transition-all duration-200 hover:shadow-lg hover:shadow-red-500/10"
-      >
+    <div className="grid grid-cols-2 gap-4 w-full max-w-sm relative z-40">
+      <button onClick={() => onSelect('youtube')} className="group flex flex-col items-center gap-3 p-5 bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/8 hover:border-red-500/40 rounded-2xl transition-all duration-200 hover:shadow-lg hover:shadow-red-500/10">
         <div className="w-full aspect-video bg-gradient-to-br from-red-600/20 to-red-900/30 border border-red-500/20 group-hover:border-red-500/40 rounded-xl flex items-center justify-center transition-all">
           <Youtube className="w-8 h-8 text-red-400" />
         </div>
@@ -216,11 +167,7 @@ const TypeSelector: React.FC<{
         </div>
       </button>
 
-      {/* Reels/Shorts */}
-      <button
-        onClick={() => onSelect('reels')}
-        className="group flex flex-col items-center gap-3 p-5 bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/8 hover:border-violet-500/40 rounded-2xl transition-all duration-200 hover:shadow-lg hover:shadow-violet-500/10"
-      >
+      <button onClick={() => onSelect('reels')} className="group flex flex-col items-center gap-3 p-5 bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/8 hover:border-violet-500/40 rounded-2xl transition-all duration-200 hover:shadow-lg hover:shadow-violet-500/10">
         <div className="w-full aspect-square bg-gradient-to-br from-violet-600/20 to-fuchsia-600/20 border border-violet-500/20 group-hover:border-violet-500/40 rounded-xl flex items-center justify-center transition-all">
           <Play className="w-8 h-8 text-violet-400" />
         </div>
@@ -231,20 +178,16 @@ const TypeSelector: React.FC<{
       </button>
     </div>
 
-    {/* Script preview */}
-    <div className="w-full max-w-sm px-4 py-3 bg-zinc-900/60 border border-white/6 rounded-xl">
-      <p className="text-zinc-500 text-[10px] uppercase font-semibold tracking-wide mb-1">Script</p>
-      <p
-        className="text-zinc-300 text-xs line-clamp-2 leading-relaxed"
-        style={{ fontFamily: "'Noto Sans Devanagari', Arial, sans-serif" }}
-      >
+    <div className="w-full max-w-sm px-4 py-3 bg-zinc-900/60 border border-white/6 rounded-xl relative z-30">
+      <p className="text-zinc-500 text-[10px] uppercase font-semibold tracking-wide mb-1">Script Context</p>
+      <p className="text-zinc-300 text-xs line-clamp-2 leading-relaxed" style={{ fontFamily: "'Noto Sans Devanagari', Arial, sans-serif" }}>
         {script.heading}
       </p>
     </div>
   </div>
 );
 
-// ── Thumbnail card ───────────────────────────────────────────────
+// ── Thumbnail Card ───────────────────────────────────────────────
 const ThumbnailCard: React.FC<{
   imageUrl: string;
   thumbnailType: ThumbnailType;
@@ -255,41 +198,18 @@ const ThumbnailCard: React.FC<{
   const isYoutube = thumbnailType === 'youtube';
 
   return (
-    <div
-      className={`relative mt-3 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/60 group transition-all duration-700 ${
-        isNew ? 'animate-[fadeSlideUp_0.5s_ease_forwards]' : ''
-      }`}
-      style={{ width: isYoutube ? '300px' : '220px' }}
-    >
-      {!loaded && (
-        <div
-          className="w-full bg-zinc-800 animate-pulse rounded-2xl"
-          style={{ aspectRatio: isYoutube ? '16/9' : '1/1' }}
-        />
-      )}
-
-      <img
-        src={imageUrl}
-        alt="Generated thumbnail"
-        className={`w-full object-cover block transition-all duration-500 ${
-          loaded ? 'opacity-100' : 'opacity-0 absolute inset-0'
-        }`}
-        style={{ aspectRatio: isYoutube ? '16/9' : '1/1' }}
-        onLoad={() => setLoaded(true)}
-      />
+    <div className={`relative mt-3 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/60 group transition-all duration-700 ${isNew ? 'animate-[fadeSlideUp_0.5s_ease_forwards]' : ''}`} style={{ width: isYoutube ? '300px' : '220px' }}>
+      {!loaded && <div className="w-full bg-zinc-800 animate-pulse rounded-2xl" style={{ aspectRatio: isYoutube ? '16/9' : '1/1' }} />}
+      
+      <img src={imageUrl} alt="Generated thumbnail" className={`w-full object-cover block transition-all duration-500 ${loaded ? 'opacity-100' : 'opacity-0 absolute inset-0'}`} style={{ aspectRatio: isYoutube ? '16/9' : '1/1' }} onLoad={() => setLoaded(true)} />
 
       {loaded && (
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-end pb-4 gap-2">
-          <button
-            onClick={() => onDownload(imageUrl)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-zinc-100 transition-all shadow-xl transform hover:scale-105 active:scale-95"
-          >
+          <button onClick={() => onDownload(imageUrl)} className="flex items-center gap-2 px-5 py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-zinc-100 transition-all shadow-xl transform hover:scale-105 active:scale-95">
             <Download className="w-3.5 h-3.5" />
             Download PNG
           </button>
-          <p className="text-white/50 text-[10px]">
-            {isYoutube ? '1536 × 1024 · YouTube' : '1024 × 1024 · Reels'}
-          </p>
+          <p className="text-white/50 text-[10px]">{isYoutube ? '1536 × 1024 · YouTube' : '1024 × 1024 · Reels'}</p>
         </div>
       )}
 
@@ -301,11 +221,7 @@ const ThumbnailCard: React.FC<{
       )}
 
       {loaded && (
-        <div className={`absolute top-2.5 right-2.5 px-2 py-1 rounded-lg text-[10px] font-bold tracking-wide ${
-          isYoutube
-            ? 'bg-red-600/90 text-white'
-            : 'bg-violet-600/90 text-white'
-        }`}>
+        <div className={`absolute top-2.5 right-2.5 px-2 py-1 rounded-lg text-[10px] font-bold tracking-wide ${isYoutube ? 'bg-red-600/90 text-white' : 'bg-violet-600/90 text-white'}`}>
           {isYoutube ? 'YT' : '1:1'}
         </div>
       )}
@@ -313,12 +229,12 @@ const ThumbnailCard: React.FC<{
   );
 };
 
-// ── Chat bubble ──────────────────────────────────────────────────
+// ── Chat Bubble ──────────────────────────────────────────────────
 const ChatBubble: React.FC<{
   message: ChatMessage;
   onDownload: (url: string) => void;
 }> = ({ message, onDownload }) => {
-  const isUser   = message.role === 'user';
+  const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
 
   if (isSystem) {
@@ -333,45 +249,25 @@ const ChatBubble: React.FC<{
   }
 
   return (
-    <div
-      className={`flex items-end gap-3 mb-5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-      style={{ animation: 'fadeSlideUp 0.35s ease forwards' }}
-    >
-      <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center shadow-lg ${
-        isUser
-          ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600'
-          : 'bg-gradient-to-br from-zinc-700 to-zinc-800 border border-white/10'
-      }`}>
-        {isUser
-          ? <User className="w-3.5 h-3.5 text-white" />
-          : <Bot className="w-3.5 h-3.5 text-zinc-300" />}
+    <div className={`flex items-end gap-3 mb-5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`} style={{ animation: 'fadeSlideUp 0.35s ease forwards' }}>
+      <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center shadow-lg ${isUser ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600' : 'bg-gradient-to-br from-zinc-700 to-zinc-800 border border-white/10'}`}>
+        {isUser ? <User className="w-3.5 h-3.5 text-white" /> : <Bot className="w-3.5 h-3.5 text-zinc-300" />}
       </div>
 
       <div className={`flex flex-col gap-2 max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
-        <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-          isUser
-            ? 'bg-gradient-to-br from-violet-600 to-fuchsia-700 text-white rounded-br-sm shadow-lg shadow-violet-500/20'
-            : 'bg-zinc-800/90 border border-white/8 text-zinc-200 rounded-bl-sm backdrop-blur-sm'
-        }`}>
-          {message.loading ? <TypingDots /> : (
-            <span style={{ whiteSpace: 'pre-wrap' }}>{message.content}</span>
-          )}
+        <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${isUser ? 'bg-gradient-to-br from-violet-600 to-fuchsia-700 text-white rounded-br-sm shadow-lg shadow-violet-500/20' : 'bg-zinc-800/90 border border-white/8 text-zinc-200 rounded-bl-sm backdrop-blur-sm'}`}>
+          <span style={{ whiteSpace: 'pre-wrap' }}>{message.content}</span>
         </div>
 
         {message.imageUrl && message.thumbnailType && (
-          <ThumbnailCard
-            imageUrl={message.imageUrl}
-            thumbnailType={message.thumbnailType}
-            onDownload={onDownload}
-            isNew={message.isNew}
-          />
+          <ThumbnailCard imageUrl={message.imageUrl} thumbnailType={message.thumbnailType} onDownload={onDownload} isNew={message.isNew} />
         )}
       </div>
     </div>
   );
 };
 
-// ── Script + channel badge ───────────────────────────────────────
+// ── Script Badge ─────────────────────────────────────────────────
 const ScriptBadge: React.FC<{
   script: ScriptState;
   thumbnailType: ThumbnailType | null;
@@ -379,16 +275,13 @@ const ScriptBadge: React.FC<{
   onChangeType: () => void;
   onChannelChange: (id: ChannelId) => void;
 }> = ({ script, thumbnailType, selectedChannel, onChangeType, onChannelChange }) => (
-  <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900/60 border border-white/8 rounded-2xl backdrop-blur-md">
+  <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900/60 border border-white/8 rounded-2xl backdrop-blur-md relative z-40">
     <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500/20 to-orange-500/20 border border-rose-500/20 flex items-center justify-center flex-shrink-0">
       <ImageIcon className="w-3.5 h-3.5 text-rose-400" />
     </div>
 
     <div className="min-w-0 flex-1">
-      <p
-        className="text-zinc-200 text-xs font-semibold leading-snug line-clamp-1"
-        style={{ fontFamily: "'Noto Sans Devanagari', Arial, sans-serif" }}
-      >
+      <p className="text-zinc-200 text-xs font-semibold leading-snug line-clamp-1" style={{ fontFamily: "'Noto Sans Devanagari', Arial, sans-serif" }}>
         {script.heading}
       </p>
       <p className="text-zinc-600 text-[10px] mt-0.5 font-medium tracking-wide uppercase">
@@ -397,40 +290,29 @@ const ScriptBadge: React.FC<{
     </div>
 
     <div className="flex items-center gap-2 flex-shrink-0">
-      {/* Channel dropdown (compact) */}
       <ChannelDropdown value={selectedChannel} onChange={onChannelChange} compact />
 
       {thumbnailType && (
-        <button
-          onClick={onChangeType}
-          title="Change format"
-          className={`text-[10px] px-2 py-1 rounded-lg font-bold tracking-wide uppercase border transition-all ${
-            thumbnailType === 'youtube'
-              ? 'bg-red-500/15 text-red-400 border-red-500/20 hover:bg-red-500/25'
-              : 'bg-violet-500/15 text-violet-400 border-violet-500/20 hover:bg-violet-500/25'
-          }`}
-        >
+        <button onClick={onChangeType} title="Change format" className={`text-[10px] px-2 py-1 rounded-lg font-bold tracking-wide uppercase border transition-all ${thumbnailType === 'youtube' ? 'bg-red-500/15 text-red-400 border-red-500/20 hover:bg-red-500/25' : 'bg-violet-500/15 text-violet-400 border-violet-500/20 hover:bg-violet-500/25'}`}>
           {thumbnailType === 'youtube' ? '▶ YT 16:9' : '□ 1:1'}
         </button>
       )}
 
-      <span className={`text-[10px] px-2 py-1 rounded-lg font-bold tracking-wide uppercase ${
-        script.scriptType === 'short'
-          ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
-          : 'bg-violet-500/15 text-violet-400 border border-violet-500/20'
-      }`}>
+      <span className={`text-[10px] px-2 py-1 rounded-lg font-bold tracking-wide uppercase ${script.scriptType === 'short' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20' : 'bg-violet-500/15 text-violet-400 border border-violet-500/20'}`}>
         {script.scriptType}
       </span>
     </div>
   </div>
 );
 
-// ── Main page ────────────────────────────────────────────────────
+
+// ── Main Page Component ──────────────────────────────────────────
 const ThumbnailGenerationPage = () => {
   const location = useLocation();
   const navigate  = useNavigate();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const script = location.state?.script as ScriptState | undefined;
 
@@ -441,6 +323,10 @@ const ThumbnailGenerationPage = () => {
   const [latestThumbnail, setLatestThumbnail] = useState<ThumbnailResult | null>(null);
   const [thumbnailType,   setThumbnailType]   = useState<ThumbnailType | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<ChannelId | null>(null);
+  
+  // Reference Image Upload States
+  const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [referenceImagePreview, setReferenceImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!script) navigate('/scripts');
@@ -471,57 +357,77 @@ const ThumbnailGenerationPage = () => {
     }
   };
 
-  // Called when user picks a format from TypeSelector
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setReferenceImage(file);
+      setReferenceImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const clearReferenceImage = () => {
+    setReferenceImage(null);
+    setReferenceImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleTypeSelect = (type: ThumbnailType) => {
     setThumbnailType(type);
   };
 
-  // Called from badge to reset everything and start over
   const handleChangeType = () => {
     setThumbnailType(null);
     setMessages([]);
     setHasGenerated(false);
     setLatestThumbnail(null);
+    clearReferenceImage();
   };
 
-  const handleGenerate = async (type?: ThumbnailType) => {
-    const activeType = type ?? thumbnailType;
-    if (!script || isGenerating || !activeType) return;
+  const buildFormData = (textInstruction?: string, isRefine = false) => {
+    const formData = new FormData();
+    formData.append('anchor', script!.anchor);
+    formData.append('scriptType', script!.scriptType || 'short');
+    formData.append('thumbnailType', thumbnailType!);
+    formData.append('channelName', selectedChannel ? selectedChannel : 'null');
+    formData.append('title', script!.heading); 
+
+    if (referenceImage) {
+      formData.append('referenceImage', referenceImage);
+    }
+
+    if (isRefine && latestThumbnail) {
+      formData.append('userInstruction', textInstruction || '');
+      formData.append('previousPrompt', latestThumbnail.prompt);
+      formData.append('previousImageKey', latestThumbnail.imageKey);
+    }
+    return formData;
+  };
+
+  const handleGenerate = async () => {
+    if (!script || isGenerating || !thumbnailType) return;
+
+    // Build the request data BEFORE clearing the UI
+    const requestData = buildFormData();
 
     setIsGenerating(true);
-
-    const channelLabel = selectedChannel
-      ? CHANNELS.find((c) => c.id === selectedChannel)?.label
-      : null;
+    clearReferenceImage(); // ✅ Clear image instantly from UI
 
     const userMsg: ChatMessage = {
-      id:      `user-${Date.now()}`,
-      role:    'user',
-      content: hasGenerated
-        ? `🔄 Naya thumbnail generate karo${channelLabel ? ` (${channelLabel})` : ''}`
-        : `🚀 Thumbnail generate karo!${channelLabel ? ` · Channel: ${channelLabel}` : ''}`,
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: hasGenerated ? `🔄 Generating new thumbnail design...` : `🚀 Generate an eye-catching thumbnail!`,
     };
-
+    
     const loadingId  = `loading-${Date.now()}`;
     const loadingMsg: ChatMessage = { id: loadingId, role: 'assistant', content: '', loading: true };
-
     setMessages((prev) => [...prev, userMsg, loadingMsg]);
 
     try {
-      const res = await axios.post(
-        `${API_BASE}/generate`,
-        {
-          anchor:       script.anchor,
-          scriptType:   script.scriptType,
-          thumbnailType: activeType,
-          channelName:  selectedChannel,   // ← new field
-        },
-        { withCredentials: true,
-          timeout: 180000
-         }
-        
-      );
-
+      const res = await axios.post(`${API_BASE}/generate`, requestData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000
+      });
       const data: ThumbnailResult = res.data.data;
       setLatestThumbnail(data);
       setHasGenerated(true);
@@ -529,26 +435,15 @@ const ThumbnailGenerationPage = () => {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
-            ? {
-                ...m,
-                loading: false,
-                content: `✨ Thumbnail is ready! (${activeType === 'youtube' ? 'YouTube 16:9' : 'Reels 1:1'})${
-                  channelLabel ? `\n📺 Channel: ${channelLabel}` : ''
-                }\nHover on image for downloading.`,
-                imageUrl:      data.imageUrl,
-                thumbnailType: activeType,
-                isNew:         true,
-              }
+            ? { ...m, loading: false, content: `✨ Thumbnail is ready!\n\nHover on image for downloading.`, imageUrl: data.imageUrl, thumbnailType, isNew: true }
             : m
         )
       );
     } catch (err: any) {
-      console.error(err)
+      console.error(err);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === loadingId
-            ? { ...m, loading: false, content: '❌ Generation is failed, please try again.' }
-            : m
+          m.id === loadingId ? { ...m, loading: false, content: '❌ Generation failed, please try again.' } : m
         )
       );
       Swal.fire({
@@ -563,61 +458,42 @@ const ThumbnailGenerationPage = () => {
 
   const handleSendMessage = async (text?: string) => {
     const messageText = text || inputText.trim();
-    if (!messageText || isGenerating || !latestThumbnail || !script || !thumbnailType) return;
+    if ((!messageText && !referenceImagePreview) || isGenerating || !latestThumbnail || !script || !thumbnailType) return;
+
+    // Build the request data BEFORE clearing the UI
+    const requestData = buildFormData(messageText, true);
 
     setInputText('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setIsGenerating(true);
+    clearReferenceImage(); // ✅ Clear image instantly from UI
 
-    const userMsg: ChatMessage   = { id: `user-${Date.now()}`, role: 'user', content: messageText };
+    const userMsg: ChatMessage   = { id: `user-${Date.now()}`, role: 'user', content: messageText || "Updated with new reference image." };
     const loadingId              = `loading-${Date.now()}`;
     const loadingMsg: ChatMessage = { id: loadingId, role: 'assistant', content: '', loading: true };
-
+    
     setMessages((prev) => [...prev, userMsg, loadingMsg]);
 
     try {
-      const res = await axios.post(
-        `${API_BASE}/refine`,
-        {
-          anchor:           script.anchor,
-          scriptType:       script.scriptType,
-          thumbnailType,
-          userInstruction:  messageText,
-          previousPrompt:   latestThumbnail.prompt,
-          previousImageKey: latestThumbnail.imageKey,
-          channelName:      selectedChannel,   // ← new field
-        },
-        { withCredentials: true,
-          timeout: 180000
-         }
-      );
-
+      const res = await axios.post(`${API_BASE}/refine`, requestData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000
+      });
+      
       const data: ThumbnailResult = res.data.data;
       setLatestThumbnail(data);
 
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
-            ? {
-                ...m,
-                loading:       false,
-                content:       `✅ ${data.changes || 'Thumbnail update ho gayi!'}\n\nAur changes chahiye?`,
-                imageUrl:      data.imageUrl,
-                thumbnailType,
-                isNew:         true,
-              }
+            ? { ...m, loading: false, content: `✅ Updated!\n\nWhat else would you like to change?`, imageUrl: data.imageUrl, thumbnailType, isNew: true }
             : m
         )
       );
     } catch (err) {
       console.error(err);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === loadingId
-            ? { ...m, loading: false, content: '❌ Error in editing, please try again.' }
-            : m
-        )
-      );
+      setMessages((prev) => prev.map((m) => m.id === loadingId ? { ...m, loading: false, content: '❌ Error in editing, please try again.' } : m));
     } finally {
       setIsGenerating(false);
     }
@@ -626,7 +502,7 @@ const ThumbnailGenerationPage = () => {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      hasGenerated ? handleSendMessage() : handleGenerate();
     }
   };
 
@@ -639,24 +515,23 @@ const ThumbnailGenerationPage = () => {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes shimmer {
+          100% { transform: translateX(100%); }
+        }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      <div className="flex flex-col h-screen bg-[#0a0a0f] overflow-hidden">
-
+      <div className="flex flex-col h-screen bg-[#0a0a0f] overflow-hidden relative">
         {/* Ambient bg */}
-        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           <div className="absolute -top-40 -left-40 w-96 h-96 bg-violet-600/8 rounded-full blur-3xl" />
           <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-fuchsia-600/6 rounded-full blur-3xl" />
         </div>
 
         {/* Top bar */}
-        <div className="relative flex-shrink-0 flex items-center gap-3 px-4 sm:px-5 py-3.5 border-b border-white/6 bg-black/40 backdrop-blur-xl">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/8 transition-all"
-          >
+        <div className="relative z-20 flex-shrink-0 flex items-center gap-3 px-4 sm:px-5 py-3.5 border-b border-white/6 bg-black/40 backdrop-blur-xl">
+          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/8 transition-all">
             <ArrowLeft className="w-4 h-4" />
           </button>
 
@@ -665,7 +540,7 @@ const ThumbnailGenerationPage = () => {
               <Wand2 className="w-3.5 h-3.5 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-white font-bold text-sm leading-none">Thumbnail Generator</h1>
+              <h1 className="text-white font-bold text-sm leading-none">AI Thumbnail Studio</h1>
             </div>
           </div>
 
@@ -675,10 +550,7 @@ const ThumbnailGenerationPage = () => {
           </div>
 
           {latestThumbnail && (
-            <button
-              onClick={() => handleDownload(latestThumbnail.imageUrl)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg shadow-emerald-500/20"
-            >
+            <button onClick={() => handleDownload(latestThumbnail.imageUrl)} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg shadow-emerald-500/20">
               <Download className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Download</span>
             </button>
@@ -686,7 +558,7 @@ const ThumbnailGenerationPage = () => {
         </div>
 
         {/* Script + channel badge */}
-        <div className="relative flex-shrink-0 px-4 sm:px-5 pt-3 pb-2">
+        <div className="relative z-10 flex-shrink-0 px-4 sm:px-5 pt-3 pb-2">
           <ScriptBadge
             script={script}
             thumbnailType={thumbnailType}
@@ -696,10 +568,8 @@ const ThumbnailGenerationPage = () => {
           />
         </div>
 
-        {/* Main area */}
-        <div className="relative flex-1 overflow-y-auto px-4 sm:px-5 py-3 scrollbar-hide">
-
-          {/* Step 1: pick format + channel */}
+        {/* Main area (Chat / Selection) */}
+        <div className="relative z-10 flex-1 overflow-y-auto px-4 sm:px-5 py-3 pb-[180px] scrollbar-hide">
           {!thumbnailType ? (
             <TypeSelector
               onSelect={handleTypeSelect}
@@ -707,19 +577,13 @@ const ThumbnailGenerationPage = () => {
               selectedChannel={selectedChannel}
               onChannelChange={setSelectedChannel}
             />
-
           ) : !hasGenerated && messages.length === 0 ? (
-            /* Step 2: ready to generate */
-            <div className="flex flex-col items-center justify-center h-full gap-6">
+            <div className="flex flex-col items-center justify-center h-full gap-6 pb-20">
               <div className="relative">
                 <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-violet-600/20 to-fuchsia-600/10 border border-violet-500/20 flex items-center justify-center">
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600/30 to-fuchsia-600/20 border border-violet-500/30 flex items-center justify-center">
                     {selectedChannel ? (
-                      <img
-                        src={CHANNELS.find((c) => c.id === selectedChannel)?.logo}
-                        alt="channel logo"
-                        className="w-10 h-10 object-contain"
-                      />
+                      <img src={CHANNELS.find((c) => c.id === selectedChannel)?.logo} alt="channel logo" className="w-10 h-10 object-contain" />
                     ) : (
                       <Wand2 className="w-9 h-9 text-violet-400" />
                     )}
@@ -727,50 +591,47 @@ const ThumbnailGenerationPage = () => {
                 </div>
                 <div className="absolute inset-0 rounded-3xl border border-violet-500/20 animate-ping opacity-30" />
               </div>
-
               <div className="text-center space-y-1.5">
                 <h3 className="text-white font-bold text-lg">Ready to generate</h3>
                 <p className="text-zinc-500 text-sm">
                   {thumbnailType === 'youtube' ? '▶ YouTube 16:9 (1536×1024)' : '□ Reels 1:1 (1024×1024)'} · {' '}
-                  {selectedChannel
-                    ? <span className="text-emerald-400">{CHANNELS.find((c) => c.id === selectedChannel)?.label} logo included</span>
-                    : <span className="text-zinc-600">No channel logo</span>
-                  }
+                  {selectedChannel ? <span className="text-emerald-400">{CHANNELS.find((c) => c.id === selectedChannel)?.label} logo included</span> : <span className="text-zinc-600">No channel logo</span>}
                 </p>
               </div>
-
-              <button
-                onClick={() => handleGenerate()}
-                disabled={isGenerating}
-                className="relative group flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 disabled:from-zinc-700 disabled:to-zinc-700 text-white font-bold text-sm rounded-2xl transition-all shadow-2xl shadow-violet-500/30 disabled:shadow-none disabled:cursor-not-allowed overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                {isGenerating
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-                  : <><Sparkles className="w-4 h-4" /> Generate Thumbnail</>}
-              </button>
             </div>
-
           ) : (
             <>
               {messages.map((message) => (
-                <ChatBubble key={message.id} message={message} onDownload={handleDownload} />
+                message.loading ? (
+                  <div key={message.id} className="flex justify-start mb-5" style={{ animation: 'fadeSlideUp 0.35s ease forwards' }}>
+                    <div className="flex flex-col gap-2 items-start">
+                      <div className="px-4 py-3 bg-zinc-800/90 border border-white/8 text-zinc-200 rounded-2xl rounded-bl-sm">
+                        Preparing your graphic...
+                      </div>
+                      <ChatGptLoader isYoutube={thumbnailType === 'youtube'} />
+                    </div>
+                  </div>
+                ) : (
+                  <ChatBubble key={message.id} message={message} onDownload={handleDownload} />
+                )
               ))}
-              <div ref={chatEndRef} />
+              <div ref={chatEndRef} className="h-4" />
             </>
           )}
         </div>
 
-        {/* Input area — only shown after format is selected */}
+        {/* ── Modern Centered Input Area ──────────────────────────────── */}
         {thumbnailType && (
-          <div className="relative flex-shrink-0 border-t border-white/6 bg-black/40 backdrop-blur-xl px-4 sm:px-5 pt-3 pb-4 space-y-3">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-50 flex flex-col items-center">
+            
+            {/* Suggestions (Only if already generated) */}
             {hasGenerated && !isGenerating && (
-              <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
+              <div className="flex gap-2 overflow-x-auto pb-3 w-full justify-center scrollbar-hide">
                 {suggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => handleSendMessage(s.replace(/^[^\s]+\s/, ''))}
-                    className="flex-shrink-0 px-3 py-1.5 text-[11px] font-semibold bg-zinc-900 hover:bg-zinc-800 border border-white/8 hover:border-white/15 text-zinc-400 hover:text-zinc-200 rounded-full transition-all whitespace-nowrap"
+                    className="flex-shrink-0 px-4 py-1.5 text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 border border-white/10 hover:border-violet-500/50 text-zinc-300 hover:text-white rounded-full transition-all shadow-lg backdrop-blur-md"
                   >
                     {s}
                   </button>
@@ -778,59 +639,59 @@ const ThumbnailGenerationPage = () => {
               </div>
             )}
 
-            {hasGenerated ? (
+            {/* Input Form Box */}
+            <div className="w-full bg-zinc-900/80 backdrop-blur-2xl border border-white/10 p-2.5 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col transition-all">
+              
+              {/* ✅ FIX 1: Image Preview moved INSIDE the regular flow so it stretches the box naturally */}
+              {referenceImagePreview && (
+                <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-white/20 shadow-md group bg-zinc-800 ml-12 mt-1 mb-2 shrink-0">
+                  <img src={referenceImagePreview} alt="Reference" className="w-full h-full object-cover" />
+                  <button onClick={clearReferenceImage} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity" title="Remove Reference">
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-end gap-2">
-                <button
-                  onClick={() => handleGenerate()}
-                  disabled={isGenerating}
-                  title="Generate new thumbnail"
-                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/8 text-zinc-500 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+                {/* Reference Upload Button */}
+                <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  title="Upload reference image"
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-all flex-shrink-0 ml-1"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+                  <Plus className="w-5 h-5" />
                 </button>
 
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={inputRef}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Kya change chahiye? (e.g. darker background, more red)"
-                    disabled={isGenerating}
-                    rows={1}
-                    className="w-full bg-zinc-900/80 border border-white/10 hover:border-white/15 focus:border-violet-500/60 text-zinc-100 placeholder-zinc-600 text-sm rounded-xl px-4 py-3 resize-none outline-none transition-all leading-relaxed disabled:opacity-40"
-                    style={{ maxHeight: '100px', overflowY: 'auto' }}
-                    onInput={(e) => {
-                      const el = e.currentTarget;
-                      el.style.height = 'auto';
-                      el.style.height = `${Math.min(el.scrollHeight, 100)}px`;
-                    }}
-                  />
-                </div>
+                {/* Textarea */}
+                <textarea
+                  ref={inputRef}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={hasGenerated ? "Message AI to refine graphic..." : "Type custom instructions or click Generate to start"}
+                  disabled={isGenerating}
+                  rows={1}
+                  className="flex-1 bg-transparent text-zinc-100 placeholder-zinc-500 text-sm py-2.5 px-2 resize-none outline-none leading-relaxed disabled:opacity-40"
+                  style={{ maxHeight: '120px' }}
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.height = 'auto';
+                    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                  }}
+                />
 
+                {/* Generate / Send Button */}
                 <button
-                  onClick={() => handleSendMessage()}
-                  disabled={isGenerating || !inputText.trim()}
-                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-700 hover:from-violet-500 hover:to-fuchsia-600 disabled:from-zinc-800 disabled:to-zinc-800 disabled:cursor-not-allowed text-white transition-all flex-shrink-0 shadow-lg shadow-violet-500/20 disabled:shadow-none"
+                  onClick={() => hasGenerated ? handleSendMessage() : handleGenerate()}
+                  disabled={isGenerating || (hasGenerated && !inputText.trim() && !referenceImagePreview)}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black hover:bg-zinc-200 transition-all disabled:opacity-40 disabled:bg-white/10 disabled:text-zinc-500 flex-shrink-0 shadow-lg mr-1"
                 >
-                  {isGenerating
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Send className="w-4 h-4" />}
+                  {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
                 </button>
               </div>
-            ) : (
-              messages.length > 0 && (
-                <button
-                  onClick={() => handleGenerate()}
-                  disabled={isGenerating}
-                  className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-700 hover:from-violet-500 hover:to-fuchsia-600 disabled:from-zinc-800 disabled:to-zinc-800 text-white font-bold text-sm rounded-xl transition-all shadow-xl shadow-violet-500/25 disabled:cursor-not-allowed"
-                >
-                  {isGenerating
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-                    : <><Sparkles className="w-4 h-4" /> Generate Thumbnail</>}
-                </button>
-              )
-            )}
+            </div>
+            
           </div>
         )}
       </div>

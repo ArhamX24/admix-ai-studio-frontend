@@ -47,8 +47,6 @@ const SaveIcon = () => (
   </svg>
 );
 
-
-
 // ── Script type selector ───────────────────────────────────────────
 const ScriptTypeSelector: React.FC<{
   onSelect: (type: "short" | "long") => void;
@@ -104,23 +102,56 @@ const ScriptTypeSelector: React.FC<{
   </div>
 );
 
-// ── Generating loader ─────────────────────────────────────────────
-const GeneratingLoader: React.FC<{ scriptType: ScriptType }> = ({ scriptType }) => (
-  <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 px-4">
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-600/10 rounded-full blur-[100px] animate-pulse" />
-    </div>
-    <div className="relative z-10 text-center">
-      <div className="relative w-20 h-20 mx-auto mb-8">
-        <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
-        <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin" />
-        <div className="absolute inset-3 rounded-full border-4 border-transparent border-t-violet-500 animate-spin [animation-direction:reverse] [animation-duration:1.5s]" />
+// ── Generating loader with 1 Min safety Timeout ───────────────────
+const GeneratingLoader: React.FC<{ 
+  scriptType: ScriptType;
+  onRetry: () => void;
+}> = ({ scriptType, onRetry }) => {
+  const [showRetry, setShowRetry] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowRetry(true);
+    }, 60000); // 1 minute safety marker
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 px-4">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-600/10 rounded-full blur-[100px] animate-pulse" />
       </div>
-      <h2 className="text-2xl font-bold text-white mb-3">Script is creating...</h2>
-      <p className="text-zinc-400 text-sm">AI is creating {scriptType === "short" ? "Short" : "Long"} script for you</p>
+      <div className="relative z-10 text-center flex flex-col items-center">
+        <div className="relative w-20 h-20 mx-auto mb-8">
+          <div className="absolute inset-0 rounded-full border-4 border-zinc-800" />
+          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin" />
+          <div className="absolute inset-3 rounded-full border-4 border-transparent border-t-violet-500 animate-spin [animation-direction:reverse] [animation-duration:1.5s]" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-3">Script is creating...</h2>
+        <p className="text-zinc-400 text-sm">AI is creating {scriptType === "short" ? "Short" : "Long"} script for you</p>
+
+        {showRetry && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 flex flex-col items-center gap-4 mt-10 p-6 bg-zinc-900/80 border border-zinc-800 rounded-2xl backdrop-blur-sm max-w-sm">
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              <span className="text-amber-400 font-semibold block mb-1">Taking longer than usual?</span>
+              The generation queue might be busy. You can reset and try again.
+            </p>
+            <button
+              onClick={onRetry}
+              className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-sm font-medium rounded-xl transition-all shadow-lg"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Cancel & Retry
+            </button>
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ── Script block — scrollable textarea ───────────────────────────
 const ScriptBlock: React.FC<{
@@ -131,9 +162,8 @@ const ScriptBlock: React.FC<{
   onChange: (v: string) => void;
 }> = ({ label, icon, accentColor, value, onChange }) => {
   const [copied, setCopied] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // ✅ ADD
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ✅ ADD — auto-resize on value change
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -171,7 +201,6 @@ const ScriptBlock: React.FC<{
         </button>
       </div>
 
-      {/* ✅ Scrollable div with dark scrollbar */}
       <div
         className="dark-scroll overflow-y-auto z-10"
         style={{
@@ -181,7 +210,7 @@ const ScriptBlock: React.FC<{
         }}
       >
         <textarea
-          ref={textareaRef}   // ✅ ADD ref
+          ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full bg-transparent text-zinc-300 text-sm leading-7 p-5 outline-none resize-none font-mono placeholder:text-zinc-600"
@@ -189,8 +218,8 @@ const ScriptBlock: React.FC<{
           style={{
             fontFamily: "'Noto Sans Devanagari', 'Arial Unicode MS', monospace",
             minHeight: "220px",
-            height: "auto",      // ✅ controlled by useEffect
-            overflow: "hidden",  // ✅ no inner scrollbar — outer div scrolls
+            height: "auto",
+            overflow: "hidden",
           }}
         />
       </div>
@@ -336,7 +365,7 @@ const AIChat: React.FC<{
   );
 };
 
-// ── Main ScriptWriter ─────────────────────────────────────────────
+// ── Main ScriptWriter Component ──────────────────────────────────
 const ScriptWriter = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
@@ -346,6 +375,7 @@ const ScriptWriter = () => {
 
   const [phase, setPhase] = useState<"select-type" | "generating" | "editor">("select-type");
   const [scriptType, setScriptType] = useState<ScriptType>(null);
+  const [title, setTitle] = useState("");
   const [anchor, setAnchor] = useState("");
   const [voiceOver, setVoiceOver] = useState("");
   const [thumbnail, setThumbnail] = useState("");
@@ -357,48 +387,78 @@ const ScriptWriter = () => {
   const [error, setError] = useState<string | null>(null);
   const [scriptGenerated, setScriptGenerated] = useState(false);
 
-  // ── No news selected ──────────────────────────────────────────
+  // Reference container for Axios Request Cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // ── No news selected empty state UI ────────────────────────────────
   if (newsIds.length === 0 && !scriptGenerated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-600/8 rounded-full blur-[120px]" />
         </div>
+        
         <div className="relative z-10 text-center flex flex-col items-center gap-6">
           <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
             <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
           </div>
+          
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">No News Selected</h2>
-            <p className="text-zinc-500 text-sm">Please select a news from AI News page to generate script.</p>
+            <h2 className="text-3xl font-bold text-white mb-3">No News Selected</h2>
+            <p className="text-zinc-400 text-sm max-w-md mx-auto">
+              How would you like to generate your script? Select an existing daily news item or paste a custom article link.
+            </p>
           </div>
-          <button
-            onClick={() => navigate("/ai-news")}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20 text-sm"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Go to AI News
-          </button>
+          
+          <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
+            <button
+              onClick={() => navigate("/ai-news")}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-xl transition-all border border-zinc-700 text-sm"
+            >
+              <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+              </svg>
+              Select from AI News
+            </button>
+
+            <button
+              onClick={() => navigate("/url-news-ai")}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20 text-sm"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+              </svg>
+              Extract News from Link
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Generate script ───────────────────────────────────────────
+  // ── Generate script with abort tracking ────────────────────────
   const handleSelectType = async (type: "short" | "long") => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     setScriptType(type);
     setPhase("generating");
     setError(null);
 
     try {
-      const res = await axios.post(`${API}/generate`, { newsIds, scriptType: type });
+      const res = await axios.post(
+        `${API}/generate`, 
+        { newsIds, scriptType: type },
+        { signal: abortControllerRef.current.signal }
+      );
 
       if (res.data?.success) {
         const data = res.data.data;
+        setTitle(data.title || "");
         setAnchor(data.anchor);
         setVoiceOver(data.voiceOver || "");
         setThumbnail(data.thumbnail || "");
@@ -409,9 +469,22 @@ const ScriptWriter = () => {
         throw new Error(res.data?.message || "Generation failed");
       }
     } catch (err: any) {
+      if (axios.isCancel(err)) {
+        console.log("Script generation aborted via timeout.");
+        return; 
+      }
       setError(err.response?.data?.message || err.message || "Failed to generate script");
       setPhase("select-type");
     }
+  };
+
+  // ── Handle loader retry action ──────────────────────────────────
+  const handleRetryQueue = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setPhase("select-type");
+    setError("Queue timeout. Please try generating the script again.");
   };
 
   // ── Refine via chat ───────────────────────────────────────────
@@ -429,7 +502,6 @@ const ScriptWriter = () => {
 
       if (res.data?.success) {
         const { anchor: newAnchor, voiceOver: newVoiceOver, changes } = res.data.data;
-        // Always update with what backend returns
         setAnchor(newAnchor);
         if (scriptType === "long") setVoiceOver(newVoiceOver || voiceOver);
         setChatMessages((prev) => [...prev, {
@@ -458,7 +530,7 @@ const ScriptWriter = () => {
       const heading = thumbnail || anchor.slice(0, 80) + "...";
       await axios.post(
         `${API}/save`,
-        { heading, anchor, voiceOver: scriptType === "short" ? "" : voiceOver, thumbnail, scriptType },
+        { heading,title, anchor, voiceOver: scriptType === "short" ? "" : voiceOver, thumbnail, scriptType },
         { withCredentials: true }
       );
       setSavedOk(true);
@@ -468,21 +540,6 @@ const ScriptWriter = () => {
     } finally {
       setSaveLoading(false);
     }
-  };
-
-  // ── Regenerate — go back to type selector, keep news context ─
-  const handleRegenerate = () => {
-    setPhase("select-type");
-    setAnchor("");
-    setVoiceOver("");
-    setThumbnail("");
-    setChatMessages([]);
-    setScriptType(null);
-    setScriptGenerated(false);
-    // DON'T navigate — stay on same page, just reset to type selector
-    // newsIds comes from Redux which still has the ID if user hasn't cleared
-    // But since we cleared on generation, we need to go back to news
-    navigate("/ai-news");
   };
 
   // ── Phase renders ─────────────────────────────────────────────
@@ -499,18 +556,19 @@ const ScriptWriter = () => {
     );
   }
 
-  if (phase === "generating") return <GeneratingLoader scriptType={scriptType} />;
+  if (phase === "generating") {
+    return <GeneratingLoader scriptType={scriptType} onRetry={handleRetryQueue} />;
+  }
 
   // ── Editor ────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
-
-    <style>{`
-  .dark-scroll::-webkit-scrollbar { width: 5px !important; }
-  .dark-scroll::-webkit-scrollbar-track { background: #18181b !important; }
-  .dark-scroll::-webkit-scrollbar-thumb { background: #3f3f46 !important; border-radius: 9999px !important; }
-  .dark-scroll::-webkit-scrollbar-thumb:hover { background: #52525b !important; }
-`}</style>
+      <style>{`
+        .dark-scroll::-webkit-scrollbar { width: 5px !important; }
+        .dark-scroll::-webkit-scrollbar-track { background: #18181b !important; }
+        .dark-scroll::-webkit-scrollbar-thumb { background: #3f3f46 !important; border-radius: 9999px !important; }
+        .dark-scroll::-webkit-scrollbar-thumb:hover { background: #52525b !important; }
+      `}</style>
 
       {/* Header */}
       <header className="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800/60 px-4 sm:px-6 py-3.5">
@@ -537,17 +595,6 @@ const ScriptWriter = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Regenerate — goes to AI news to pick new article */}
-            {/* <button
-              onClick={handleRegenerate}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-all border border-zinc-700"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-              </svg>
-              <span className="hidden sm:inline">New Script</span>
-            </button> */}
-
             <button
               onClick={handleSave}
               disabled={saveLoading}

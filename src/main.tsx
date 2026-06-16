@@ -20,6 +20,7 @@ import AdminPanel from './Pages/Admin/AdminPanel.tsx';
 import AvatarPage from './Pages/User/AvatarPage.tsx';
 import AiNewsPage from './Pages/User/AiNewsPage.tsx';
 import ThumbnailGenerationPage from './Pages/User/ThumbnailGenerationPage.tsx';
+import UrlExtractor from './Pages/User/UrlExtractor.tsx';
 
 const AppRouter = createBrowserRouter([
   {
@@ -115,6 +116,14 @@ const AppRouter = createBrowserRouter([
           </ProtectedRoute>
         )
       }, 
+      {
+        path: "/url-news-ai",
+        element: (
+          <ProtectedRoute allowedRoles={['ADMIN', 'SCRIPT_WRITER']}>
+            <UrlExtractor/>
+          </ProtectedRoute>
+        )
+      },
       {
         path: "/select-avatar",
         element: <AvatarPage/>

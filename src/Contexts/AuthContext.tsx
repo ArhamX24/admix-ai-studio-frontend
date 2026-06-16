@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // Note: We use the /me endpoint which is protected by authenticateToken
       const response = await axios.get<AuthResponse>(
-        `/api/v1/auth/me`
+        `${baseURL}/api/v1/auth/me`
       );
 
       if (response.data.success && response.data.user) {
@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       const response = await axios.post<AuthResponse>(
-        `/api/v1/auth/login`,
+        `${baseURL}/api/v1/auth/login`,
         { email, password }
       );
 
@@ -105,7 +105,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // ✅ 3. Logout
   const logout = useCallback(async () => {
     try {
-      await axios.post(`/api/v1/auth/logout`);
+      await axios.post(`${baseURL}/api/v1/auth/logout`);
     } catch (e) {
       console.error("Logout API failed", e);
     }
