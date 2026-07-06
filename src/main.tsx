@@ -19,8 +19,9 @@ import { AuthProvider } from './Contexts/AuthContext.tsx';
 import AdminPanel from './Pages/Admin/AdminPanel.tsx';
 import AvatarPage from './Pages/User/AvatarPage.tsx';
 import AiNewsPage from './Pages/User/AiNewsPage.tsx';
-import ThumbnailGenerationPage from './Pages/User/ThumbnailGenerationPage.tsx';
 import UrlExtractor from './Pages/User/UrlExtractor.tsx';
+import AssetGeneratorPage from './Pages/User/AssetGeneratorPage.tsx';
+import Transcriptor from './Pages/User/Transcriptor.tsx';
 
 const AppRouter = createBrowserRouter([
   {
@@ -112,7 +113,7 @@ const AppRouter = createBrowserRouter([
         path: "/generate-thumbnail",
         element: (
           <ProtectedRoute allowedRoles={['ADMIN']}>
-            <ThumbnailGenerationPage/>
+            <AssetGeneratorPage/>
           </ProtectedRoute>
         )
       }, 
@@ -121,6 +122,14 @@ const AppRouter = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['ADMIN', 'SCRIPT_WRITER']}>
             <UrlExtractor/>
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: "/generate-transcript",
+        element: (
+          <ProtectedRoute allowedRoles={['ADMIN', 'SCRIPT_WRITER']}>
+            <Transcriptor/>
           </ProtectedRoute>
         )
       },

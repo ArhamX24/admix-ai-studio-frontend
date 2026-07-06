@@ -27,6 +27,10 @@ const CATEGORIES = [
   { id: "crime", label: "Crime" },
   { id: "education", label: "Education" },
   { id: "business", label: "Business" },
+  { id: "technology", label: "Technology" },
+  { id: "sports", label: "Sports" },
+  { id: "entertainment", label: "Entertainment" },
+  { id: "health", label: "Health" },
   { id: "lifestyle", label: "Lifestyle" },
 ];
 

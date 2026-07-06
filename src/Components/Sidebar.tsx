@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/Contexts/AuthContext';
 import { 
   Newspaper, Megaphone, CameraIcon as CameraIconComponent, 
-  FileText, Mic, History, LogOut, Menu, X, Loader2 , Settings
+  FileText, Mic, History, LogOut, Menu, X, Loader2 , Settings, ImageIcon, FilePen
 } from 'lucide-react';
 import logo from "../../public/logo.jpg";
 import Swal from 'sweetalert2'; // ✅ Import SweetAlert
@@ -32,9 +32,11 @@ const Sidebar: React.FC = () => {
       return [
         { icon: Settings, label: 'Admin Panel', path: '/admin-panel' },
         { icon: Newspaper, label: 'AI News', path: '/ai-news'},
-        { icon: Newspaper, label: 'News Agent', path: '/news-agent', role: 'NEWS_GENERATOR' },
+        // { icon: Newspaper, label: 'News Agent', path: '/news-agent', role: 'NEWS_GENERATOR' },
         { icon: Megaphone, label: 'Voice Over Agent', path: '/voice-over-agent', role: 'AUDIO_GENERATOR' },
-        { icon: FileText, label: 'Script Writer', path: '/script-writer', role: 'SCRIPT_WRITER' },
+        { icon: FileText, label: 'Transcriptor', path: '/generate-transcript', role: 'SCRIPT_WRITER' },
+        { icon: FilePen, label: 'Script Writer', path: '/script-writer', role: 'SCRIPT_WRITER' },
+        { icon: ImageIcon, label: 'Generate Asset', path: '/generate-thumbnail', role: 'SCRIPT_WRITER' },
         { icon: Mic, label: 'Scripts List', path: '/scripts-list', role: 'VOICE_GENERATOR' },
         { icon: CameraIconComponent, label: 'Video Creator', path: '/video-agent', role: 'VIDEO_GENERATOR' }
       ];
