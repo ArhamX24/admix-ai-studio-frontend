@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Copy, PlayCircle, Search, CheckCheck, Loader2, Globe2, ChevronLeft } from 'lucide-react';
 import { baseURL } from '@/Utils/URL';
+import { useNavigate } from 'react-router-dom'
+import { useAppDispatch } from '@/hooks/hooks'
+import { setTranscript } from '@/lib/Slice/transcriptSlice'
+import { Sparkles } from 'lucide-react'
 
 interface TranscriptSegment {
   id: string | number;
@@ -75,6 +79,9 @@ const Transcriptor = () => {
   const isPollingRef = useRef<boolean>(false);
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
   // 1-by-1 STREAMING EFFECT (Adjusted for larger paragraphs)
   useEffect(() => {
@@ -174,21 +181,27 @@ const Transcriptor = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleCopyAll = () => {
-    const fullText = fullSegments.map(seg => `[${seg.startTime}] ${seg.text}`).join('\n');
-    navigator.clipboard.writeText(fullText);
-    setIsCopiedAll(true);
-    setTimeout(() => setIsCopiedAll(false), 2000);
-  };
+ const handleCopyAll = () => {
+  const fullText = fullSegments.map(seg => seg.text).join('\n\n');
+  navigator.clipboard.writeText(fullText);
+  setIsCopiedAll(true);
+  setTimeout(() => setIsCopiedAll(false), 2000);
+};
 
-  const resetState = () => {
-    isPollingRef.current = false; 
-    setTranscriptData(null); 
-    setVideoUrl('');
-    setSearchQuery('');
-    setFullSegments([]);
-    setDisplayedSegments([]);
-  };
+ const resetState = () => {
+  isPollingRef.current = false; 
+  setTranscriptData(null); 
+  setVideoUrl('');
+  setSearchQuery('');
+  setFullSegments([]);
+  setDisplayedSegments([]);
+};
+
+const handleCreateScript = () => {
+  const fullText = fullSegments.map(seg => seg.text).join(' ');
+  dispatch(setTranscript(fullText));
+  navigate('/script-writer');
+};
 
   const filteredSegments = displayedSegments.filter(seg => 
     seg.text.toLowerCase().includes(searchQuery.toLowerCase())
@@ -289,24 +302,31 @@ const Transcriptor = () => {
 
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-            <div className="flex items-center gap-4 md:gap-6">
-                <h3 className="text-[17px] font-bold flex items-center gap-3 text-zinc-100">
-                    Transcript
-                    {isLoading ? (
-                      <span className="text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-semibold animate-pulse border border-purple-800/50">Transcribing</span>
-                    ) : (
-                      <span className="text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-semibold border border-purple-800/50">Ready</span>
-                    )}
-                </h3>
-            </div>
-            
-            <div className="flex items-center gap-4 w-full sm:w-auto">
-                <button onClick={handleCopyAll} className="flex items-center justify-center gap-2 text-zinc-400 hover:text-white text-[13px] font-medium transition-colors bg-[#111] px-4 py-2 rounded-lg border border-zinc-800">
-                  {isCopiedAll ? <CheckCheck size={15} className="text-purple-400"/> : <Copy size={15} />}
-                  Copy Full Text
-                </button>
-            </div>
-        </div>
+    <div className="flex items-center gap-4 md:gap-6">
+        <h3 className="text-[17px] font-bold flex items-center gap-3 text-zinc-100">
+            Transcript
+            {isLoading ? (
+              <span className="text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-semibold animate-pulse border border-purple-800/50">Transcribing</span>
+            ) : (
+              <span className="text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-semibold border border-purple-800/50">Ready</span>
+            )}
+        </h3>
+    </div>
+    
+    <div className="flex items-center gap-3 w-full sm:w-auto">
+        <button onClick={handleCopyAll} className="flex items-center justify-center gap-2 text-zinc-400 hover:text-white text-[13px] font-medium transition-colors bg-[#111] px-4 py-2 rounded-lg border border-zinc-800">
+          {isCopiedAll ? <CheckCheck size={15} className="text-purple-400"/> : <Copy size={15} />}
+          Copy All
+        </button>
+        {/* CREATE SCRIPT BUTTON */}
+        {!isLoading && fullSegments.length > 0 && (
+          <button onClick={handleCreateScript} className="flex items-center justify-center gap-2 text-white text-[13px] font-bold transition-colors bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg shadow-lg shadow-purple-500/20">
+            <Sparkles size={15} />
+            Create Script
+          </button>
+        )}
+    </div>
+</div>
 
         {/* Search */}
         <div className="relative mb-6">

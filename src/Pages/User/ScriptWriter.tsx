@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/hooks";
 import { clearSelectedNewsIds } from "../../lib/Slice/newSelectionSlice.ts";
+import { clearTranscript } from "../../lib/Slice/transcriptSlice.ts";
 import axios from "axios";
 import { baseURL } from "@/Utils/URL";
 
@@ -11,10 +12,44 @@ type ScriptType = "short" | "long" | "longest" | null;
 
 interface ChatMessage {
   role: "user" | "assistant";
-  content: string;
+  content?: string;
+  anchor?: string;
+  voiceOver?: string;
+  suggestions?: string;
   imagePreview?: string;
   timestamp: Date;
 }
+
+// ── Markdown Bold Renderer ──────────────────────────────────────────
+// Converts **bold** markdown segments into <strong> tags without pulling in
+// a full markdown library. Keeps everything else (line breaks, spacing,
+// the "...." pacing dots) exactly as the model wrote it.
+const renderFormattedText = (text?: string) => {
+  if (!text) return null;
+
+  // Split on **...** while keeping the delimiters so we can tell bold
+  // segments apart from normal text.
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={idx} className="font-bold text-white">
+          {boldText}
+        </strong>
+      );
+    }
+    // React.Fragment preserves plain text (including newlines, since the
+    // parent container already has whitespace-pre-wrap applied).
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+};
+
+// Strips markdown bold markers for plain-text contexts like clipboard copy,
+// so what gets pasted elsewhere (e.g. a teleprompter tool) doesn't carry
+// stray asterisks.
+const stripMarkdownBold = (text?: string) => (text || "").replace(/\*\*([^*]+)\*\*/g, "$1");
 
 // ── SVG Icons ──────────────────────────────────────────────────────
 const MicIcon = () => (
@@ -56,6 +91,12 @@ const SaveIcon = () => (
 const PhotoIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25z" />
+  </svg>
+);
+
+const AlertIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
   </svg>
 );
 
@@ -106,7 +147,7 @@ const ScriptTypeSelector: React.FC<{
         <div className="w-12 h-12 rounded-xl bg-amber-600/15 border border-amber-500/20 flex items-center justify-center mb-5 group-hover:bg-amber-600/25 transition-colors">
           <AnchorIcon />
         </div>
-        <h3 className="text-xl font-bold text-white mb-2">Long Video </h3>
+        <h3 className="text-xl font-bold text-white mb-2">Long Video</h3>
         <p className="text-zinc-500 text-sm">10-20 min duration • Anchor Only</p>
       </button>
     </div>
@@ -119,16 +160,22 @@ const TimeConfigurator: React.FC<{
   onConfirm: (aMins: number, voMins: number) => void;
   onBack: () => void;
 }> = ({ type, onConfirm, onBack }) => {
-  const [anchorMins, setAnchorMins] = useState(type === "longest" ? 12 : 1);
-  const [voMins, setVoMins] = useState(5);
+  const [anchorMins, setAnchorMins] = useState(type === "longest" ? 5 : 1);
+  const [voMins, setVoMins] = useState(3);
 
   const getMinMaxValues = () => {
+    // Limits lowered to prevent LLM hallucination/truncation on thin source material
     if (type === "short") return { min: 0.5, max: 3, step: 0.5 };
-    if (type === "longest") return { min: 5, max: 25, step: 1 };
+    if (type === "longest") return { min: 3, max: 10, step: 1 }; // Lowered from 25 to 10 max
     return { min: 0.5, max: 4, step: 0.5 }; // default for standard long anchor
   };
 
+  const getVOBounds = () => {
+    return { min: 1, max: 8, step: 0.5 }; // Lowered max VO limit to 8 mins
+  }
+
   const bounds = getMinMaxValues();
+  const voBounds = getVOBounds();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 px-4">
@@ -137,21 +184,21 @@ const TimeConfigurator: React.FC<{
           <span>Duration Parameter Config</span>
         </div>
         <h2 className="text-2xl font-bold text-white mb-6">Configure Script Limits</h2>
-        
+
         <div className="space-y-6">
           <div>
             <div className="flex justify-between text-sm font-medium text-zinc-300 mb-2">
               <span>Anchor Speaking Target</span>
               <span className="text-blue-400 font-mono font-bold">{anchorMins} Min</span>
             </div>
-            <input 
-              type="range" 
-              min={bounds.min} 
-              max={bounds.max} 
-              step={bounds.step} 
-              value={anchorMins} 
-              onChange={(e) => setAnchorMins(Number(e.target.value))} 
-              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+            <input
+              type="range"
+              min={bounds.min}
+              max={bounds.max}
+              step={bounds.step}
+              value={anchorMins}
+              onChange={(e) => setAnchorMins(Number(e.target.value))}
+              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
             <div className="flex justify-between text-zinc-500 text-[11px] mt-1 font-mono">
               <span>Min: {bounds.min}m</span>
@@ -166,32 +213,32 @@ const TimeConfigurator: React.FC<{
                 <span>Voice Over (VO) Target</span>
                 <span className="text-violet-400 font-mono font-bold">{voMins} Min</span>
               </div>
-              <input 
-                type="range" 
-                min={2} 
-                max={15} 
-                step={0.5} 
-                value={voMins} 
-                onChange={(e) => setVoMins(Number(e.target.value))} 
-                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-violet-500" 
-            />
+              <input
+                type="range"
+                min={voBounds.min}
+                max={voBounds.max}
+                step={voBounds.step}
+                value={voMins}
+                onChange={(e) => setVoMins(Number(e.target.value))}
+                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-violet-500"
+              />
               <div className="flex justify-between text-zinc-500 text-[11px] mt-1 font-mono">
-                <span>Min: 2m</span>
+                <span>Min: {voBounds.min}m</span>
                 <span>Target: ~{Math.round(voMins * 130)} words</span>
-                <span>Max: 15m</span>
+                <span>Max: {voBounds.max}m</span>
               </div>
             </div>
           )}
 
           <div className="flex gap-3 pt-4">
-            <button 
+            <button
               onClick={onBack}
               className="flex-1 py-3 bg-zinc-800 border border-zinc-700 text-zinc-300 font-semibold rounded-xl hover:bg-zinc-700 hover:text-white transition-all text-sm"
             >
               Back
             </button>
-            <button 
-              onClick={() => onConfirm(anchorMins, voMins)} 
+            <button
+              onClick={() => onConfirm(anchorMins, voMins)}
               className="flex-[2] py-3 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all text-sm shadow-xl shadow-white/5"
             >
               Compile Layout
@@ -204,7 +251,7 @@ const TimeConfigurator: React.FC<{
 };
 
 // ── 3. Generating Loader ──────────────────────────────────────────
-const GeneratingLoader: React.FC<{ 
+const GeneratingLoader: React.FC<{
   scriptType: ScriptType;
   onRetry: () => void;
 }> = ({ scriptType, onRetry }) => {
@@ -245,82 +292,46 @@ const GeneratingLoader: React.FC<{
   );
 };
 
-// ── 4. Script Block Container ─────────────────────────────────────
-const ScriptBlock: React.FC<{
-  label: string;
-  icon: React.ReactNode;
-  accentColor: string;
-  value: string;
-  onChange: (v: string) => void;
-}> = ({ label, icon, accentColor, value, onChange }) => {
-  const [copied, setCopied] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [value]);
+// ── 4. Main Architecture Component (ChatGPT Interface) ────────────
+const ScriptWriter = () => {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const selectedNewsId = useAppSelector((s) => s.newsSelection.selectedNewsId);
+  const transcriptText = useAppSelector((s) => s.transcript.fullText);
+  const newsIds: string[] = selectedNewsId ? [selectedNewsId] : [];
 
-  return (
-    <div className={`rounded-2xl border bg-zinc-900/40 overflow-hidden flex flex-col ${accentColor}`}>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/60 flex-shrink-0 bg-zinc-900/20">
-        <div className="flex items-center gap-3">
-          <div className="text-zinc-400">{icon}</div>
-          <span className="text-xs font-semibold text-zinc-300 tracking-wide uppercase">{label}</span>
-        </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center z-10 gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs transition-all"
-        >
-          {copied ? <span className="text-green-400 font-medium">Copied!</span> : <><CopyIcon />Copy</>}
-        </button>
-      </div>
+  const [phase, setPhase] = useState<"select-type" | "configure-time" | "generating" | "chat">("select-type");
+  const [scriptType, setScriptType] = useState<ScriptType>(null);
 
-      <div className="dark-scroll overflow-y-auto" style={{ maxHeight: "460px" }}>
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-transparent text-zinc-300 text-sm leading-8 p-6 outline-none resize-none font-medium selection:bg-blue-600/30 selection:text-white"
-          placeholder={`${label} content will be loaded natively...`}
-          style={{
-            fontFamily: "'Noto Sans Devanagari', 'Arial Unicode MS', sans-serif",
-            minHeight: "240px",
-            height: "auto",
-            overflow: "hidden",
-          }}
-        />
-      </div>
-    </div>
-  );
-};
+  // Tracking the active script parameters for saving to the DB
+  const [title, setTitle] = useState("");
+  const [activeAnchor, setActiveAnchor] = useState("");
+  const [activeVoiceOver, setActiveVoiceOver] = useState("");
+  const [thumbnail, setThumbnail] = useState("");
+  const [newsImageUrl, setNewsImageUrl] = useState<string | null>(null);
+  const [scriptGenerated, setScriptGenerated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-// ── 5. AI Chat (Vision and Multimodal Upgraded) ───────────────────
-const AIChat: React.FC<{
-  onRefine: (msg: string, imgBase64?: string) => void;
-  messages: ChatMessage[];
-  loading: boolean;
-  scriptType: ScriptType;
-}> = ({ onRefine, messages, loading, scriptType }) => {
+  // Chat States
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
   const [input, setInput] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const scrollToBottom = () => bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-
+  // Keep chat scrolled to bottom
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatLoading, phase]);
 
+  // Handle Image Upload for Chat
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -330,146 +341,14 @@ const AIChat: React.FC<{
     }
   };
 
-  const handleSend = () => {
-    if (!input.trim() && !imagePreview || loading) return;
-    
-    let cleanBase64 = undefined;
-    if (imagePreview) {
-      cleanBase64 = imagePreview.split(",")[1];
-    }
-
-    onRefine(input.trim() || "Please evaluate this attached asset style template layout reference", cleanBase64);
-    setInput("");
-    setImagePreview(null);
+  // Copy functionality for script blocks — strips ** markers so pasted
+  // text elsewhere doesn't carry raw markdown syntax.
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(stripMarkdownBold(text));
+    alert("Copied to clipboard!");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-zinc-900/30 rounded-2xl border border-zinc-800 overflow-hidden backdrop-blur-md">
-      <div className="px-5 py-4 border-b border-zinc-800/80 flex items-center justify-between flex-shrink-0 bg-zinc-900/10">
-        <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-          <div>
-            <p className="text-xs font-bold text-zinc-200 uppercase tracking-wider">ChatBot Editor</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="dark-scroll flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-zinc-950/20">
-        {messages.length === 0 ? (
-          <div className="text-center pt-8 px-4 flex flex-col items-center">
-            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-3">
-              <SparklesIcon />
-            </div>
-            <p className="text-zinc-400 text-xs font-medium max-w-xs leading-relaxed">
-              Paste instructions or drop structural template layouts using the image uploader module.
-            </p>
-          </div>
-        ) : (
-          messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                msg.role === "user" ? "bg-blue-600 text-white rounded-br-sm shadow-md" : "bg-zinc-800/90 border border-zinc-700/50 text-zinc-300 rounded-bl-sm"
-              }`}>
-                {msg.imagePreview && (
-                  <img src={msg.imagePreview} alt="Vision Token Entity" className="w-full max-w-[180px] rounded-lg mb-2 border border-zinc-700 shadow-sm" />
-                )}
-                <span style={{ fontFamily: msg.role === "assistant" ? "'Noto Sans Devanagari', sans-serif" : "inherit" }}>
-                  {msg.content}
-                </span>
-              </div>
-            </div>
-          ))
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input UI */}
-      <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/40 flex-shrink-0">
-        {imagePreview && (
-          <div className="relative inline-block mb-3 bg-zinc-900 p-1 rounded-xl border border-zinc-800 shadow-xl">
-            <img src={imagePreview} className="h-16 w-16 object-cover rounded-lg" />
-            <button 
-              onClick={() => setImagePreview(null)} 
-              className="absolute -top-1.5 -right-1.5 bg-zinc-800 text-zinc-400 hover:text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] border border-zinc-700"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        <div className="flex items-end gap-2 bg-zinc-950/80 rounded-xl border border-zinc-800 p-2 focus-within:border-zinc-700/80 transition-all">
-          <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageFile} />
-          <button 
-            onClick={() => fileInputRef.current?.click()} 
-            className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
-            disabled={loading}
-          >
-            <PhotoIcon />
-          </button>
-          <textarea 
-            value={input} 
-            onChange={(e) => setInput(e.target.value)} 
-            onKeyDown={handleKeyDown}
-            placeholder="Type instructions or paste reference..." 
-            rows={1} 
-            className="flex-1 bg-transparent text-sm text-zinc-200 p-2 outline-none resize-none max-h-24 dark-scroll min-h-[36px]" 
-            disabled={loading} 
-          />
-          <button 
-            onClick={handleSend} 
-            disabled={(input.trim() === "" && !imagePreview) || loading} 
-            className={`p-2 rounded-lg flex-shrink-0 transition-all ${
-              (input.trim() || imagePreview) && !loading ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-zinc-800 text-zinc-600"
-            }`}
-          >
-            <SendIcon />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ── 6. Main Architecture Component ────────────────────────────────
-const ScriptWriter = () => {
-  const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-
-  const selectedNewsId = useAppSelector((s) => s.newsSelection.selectedNewsId);
-  const newsIds: string[] = selectedNewsId ? [selectedNewsId] : [];
-
-  
-
-  const [phase, setPhase] = useState<"select-type" | "configure-time" | "generating" | "editor">("select-type");
-  const [scriptType, setScriptType] = useState<ScriptType>(null);
-  
-  const [title, setTitle] = useState("");
-  const [anchor, setAnchor] = useState("");
-  const [voiceOver, setVoiceOver] = useState("");
-  const [thumbnail, setThumbnail] = useState("");
-  const [newsImageUrl, setNewsImageUrl] = useState<string | null>(null);
-  
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  
-  const [activeTab, setActiveTab] = useState<"anchor" | "voiceover">("anchor");
-  const [error, setError] = useState<string | null>(null);
-  const [scriptGenerated, setScriptGenerated] = useState(false);
-  
-  const [timeLimits, setTimeLimits] = useState({ anchorMins: 1, voMins: 5 });
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  if (newsIds.length === 0 && !scriptGenerated) {
+  if (newsIds.length === 0 && !transcriptText && !scriptGenerated && phase === "select-type") {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 px-4">
         <div className="relative z-10 text-center flex flex-col items-center gap-6">
@@ -501,7 +380,6 @@ const ScriptWriter = () => {
   };
 
   const handleTimeConfirmation = async (aMins: number, voMins: number) => {
-    setTimeLimits({ anchorMins: aMins, voMins });
     setPhase("generating");
     setError(null);
 
@@ -509,7 +387,8 @@ const ScriptWriter = () => {
 
     try {
       const res = await axios.post(`${API}/generate`, {
-        newsIds,
+        newsIds: newsIds.length > 0 ? newsIds : undefined,
+        transcriptText: transcriptText || undefined,
         scriptType,
         anchorMins: aMins,
         voMins
@@ -518,13 +397,33 @@ const ScriptWriter = () => {
       if (res.data?.success) {
         const payload = res.data.data;
         setTitle(payload.title || "News Update");
-        setAnchor(payload.anchor || "");
-        setVoiceOver(payload.voiceOver || "");
+        setActiveAnchor(payload.anchor || "");
+        setActiveVoiceOver(payload.voiceOver || "");
         setThumbnail(payload.thumbnail || "");
-        setNewsImageUrl(payload.newsImageUrl || null); // <--- ADD THIS LINE
+        setNewsImageUrl(payload.newsImageUrl || null);
         setScriptGenerated(true);
+
+        // 1. Clear News IDs
         dispatch(clearSelectedNewsIds());
-        setPhase("editor");
+
+        // 2. Clear Transcript
+        if (transcriptText) {
+          dispatch(clearTranscript());
+        }
+
+        // 3. Setup Initial Chat State
+        setChatMessages([
+          {
+            role: "assistant",
+            content: "I have generated the initial script based on your parameters. Please review it below, along with my safety and quality review. Let me know if you want to make any adjustments.",
+            anchor: payload.anchor,
+            voiceOver: payload.voiceOver,
+            suggestions: payload.suggestions,
+            timestamp: new Date()
+          }
+        ]);
+
+        setPhase("chat");
       }
     } catch (err: any) {
       if (axios.isCancel(err)) return;
@@ -533,50 +432,80 @@ const ScriptWriter = () => {
     }
   };
 
-  const handleRefine = async (userMessage: string, imgBase64?: string) => {
+  const handleSendRefinement = async () => {
+    if ((!input.trim() && !imagePreview) || chatLoading) return;
+
+    let cleanBase64 = undefined;
+    if (imagePreview) {
+      cleanBase64 = imagePreview.split(",")[1];
+    }
+
+    const userMsg = input.trim() || "Please evaluate this attached asset style template layout reference";
+    setInput("");
+    setImagePreview(null);
+
+    setChatMessages(p => [
+        ...p, 
+        { 
+          role: "user", 
+          content: userMsg, 
+          imagePreview: imagePreview || undefined, // converts null to undefined
+          timestamp: new Date() 
+        }
+      ]);
+
     setChatLoading(true);
-    setChatMessages(p => [...p, { role: "user", content: userMessage, imagePreview: imgBase64 ? `data:image/jpeg;base64,${imgBase64}` : undefined, timestamp: new Date() }]);
 
     try {
       const res = await axios.post(`${API}/refine`, {
-        anchor,
-        voiceOver: (scriptType === "short" || scriptType === "longest") ? "" : voiceOver,
-        userMessage,
+        anchor: activeAnchor,
+        voiceOver: (scriptType === "short" || scriptType === "longest") ? "" : activeVoiceOver,
+        userMessage: userMsg,
         scriptType,
-        base64Image: imgBase64
+        base64Image: cleanBase64
       });
 
       if (res.data?.success) {
         const data = res.data.data;
-        setAnchor(data.anchor);
-        if (scriptType === "long") setVoiceOver(data.voiceOver || voiceOver);
-        setChatMessages(p => [...p, { role: "assistant", content: data.changes || "Script successfully recompiled.", timestamp: new Date() }]);
+
+        // Update the active script state for saving
+        setActiveAnchor(data.anchor);
+        if (scriptType === "long") setActiveVoiceOver(data.voiceOver || activeVoiceOver);
+
+        setChatMessages(p => [...p, {
+          role: "assistant",
+          content: data.changes || "I have applied your requested changes. Here is the updated script.",
+          anchor: data.anchor,
+          voiceOver: data.voiceOver,
+          suggestions: data.suggestions,
+          timestamp: new Date()
+        }]);
       }
-    } catch (err) {
-      setChatMessages(p => [...p, { role: "assistant", content: "Parsing exception on sandbox processing thread.", timestamp: new Date() }]);
+    } catch (err: any) {
+      setChatMessages(p => [...p, { role: "assistant", content: "Sorry, I encountered a parsing exception on the sandbox processing thread.", timestamp: new Date() }]);
     } finally {
       setChatLoading(false);
     }
   };
 
-const handleSave = async () => {
+  const handleSave = async () => {
     setSaveLoading(true);
     try {
-      const heading = thumbnail || anchor.slice(0, 75) + "...";
+      const heading = thumbnail || activeAnchor.slice(0, 75) + "...";
       await axios.post(`${API}/save`, {
         heading,
         title: title || heading,
-        anchor,
-        voiceOver: (scriptType === "short" || scriptType === "longest") ? "" : voiceOver,
+        anchor: activeAnchor,
+        voiceOver: (scriptType === "short" || scriptType === "longest") ? "" : activeVoiceOver,
         thumbnail: thumbnail || heading,
         scriptType,
         newsIds: newsIds.length > 0 ? newsIds : [],
-        newsImageUrl: newsImageUrl 
+        newsImageUrl: newsImageUrl
       }, { withCredentials: true });
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || "Database write error occurred.");
+      alert(err.response?.data?.message || "Database write error occurred.");
     } finally {
       setSaveLoading(false);
     }
@@ -586,89 +515,179 @@ const handleSave = async () => {
   if (phase === "configure-time") return <TimeConfigurator type={scriptType} onConfirm={handleTimeConfirmation} onBack={() => setPhase("select-type")} />;
   if (phase === "generating") return <GeneratingLoader scriptType={scriptType} onRetry={() => setPhase("select-type")} />;
 
-  // ── Editor Environment Layout ────────────────────────────────────
+  // ── ChatGPT Style Environment Layout ────────────────────────────────────
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col font-sans selection:bg-blue-600/30 selection:text-white">
+    <div className="flex flex-col h-screen bg-[#212121] font-sans selection:bg-blue-600/30 selection:text-white">
       <style>{`
         .dark-scroll::-webkit-scrollbar { width: 6px !important; }
-        .dark-scroll::-webkit-scrollbar-track { background: #09090b !important; }
-        .dark-scroll::-webkit-scrollbar-thumb { background: #27272a !important; border-radius: 99px !important; }
-        .dark-scroll::-webkit-scrollbar-thumb:hover { background: #3f3f46 !important; }
+        .dark-scroll::-webkit-scrollbar-track { background: transparent !important; }
+        .dark-scroll::-webkit-scrollbar-thumb { background: #404040 !important; border-radius: 99px !important; }
+        .dark-scroll::-webkit-scrollbar-thumb:hover { background: #525252 !important; }
       `}</style>
 
       {/* Controller Header */}
-      <header className="sticky top-0 z-30 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900 px-4 sm:px-6 py-3.5">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/ai-news")} className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center text-zinc-400 transition-all">
-              ←
-            </button>
-            <div>
-              <h1 className="text-sm font-bold text-white tracking-wide">Workspace</h1>
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 capitalize">
-                {scriptType === "longest" ? "Long Podcast Deep-Dive" : `${scriptType} platform`}
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleSave}
-            disabled={saveLoading}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all ${
-              savedOk ? "bg-green-950 text-green-400 border border-green-800/60" : "bg-white text-black hover:bg-zinc-200"
-            }`}
-          >
-            {savedOk ? "Saved!" : <><SaveIcon /> Save Scripts</>}
+      <header className="sticky top-0 z-30 bg-[#212121] border-b border-zinc-800 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate("/ai-news")} className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 flex items-center justify-center transition-all">
+            ←
           </button>
+          <div>
+            <h1 className="text-sm font-bold text-white tracking-wide">AI Script Editor</h1>
+            <span className="text-[11px] text-zinc-400 capitalize">{scriptType === "longest" ? "Long Podcast Deep-Dive" : `${scriptType} platform`}</span>
+          </div>
         </div>
+        <button
+          onClick={handleSave}
+          disabled={saveLoading || !activeAnchor}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
+            savedOk ? "bg-green-900 text-green-400 border-green-800" : "bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/5"
+          }`}
+        >
+          {savedOk ? "Saved to Database!" : <><SaveIcon /> Save Script</>}
+        </button>
       </header>
 
       {error && (
-        <div className="mx-6 mt-4 px-4 py-3 bg-red-950/40 border border-red-900 text-red-400 rounded-xl text-xs flex justify-between items-center">
+        <div className="mx-auto max-w-3xl w-full mt-4 px-4 py-3 bg-red-950/40 border border-red-900 text-red-400 rounded-xl text-xs flex justify-between items-center">
           <span>{error}</span><button onClick={() => setError(null)}>✕</button>
         </div>
       )}
 
-      {/* Editor Space Matrix */}
-      <div className="flex-1 max-w-[1600px] mx-auto w-full px-4 sm:px-6 py-6 flex flex-col xl:flex-row gap-5 h-[calc(100vh-80px)] overflow-hidden min-h-0">
-        <div className="flex-1 flex flex-col gap-4 overflow-y-auto dark-scroll pr-1 min-w-0">
-          
-          {/* Long script layout specific tab selectors for small screen matrices */}
-          {scriptType === "long" && (
-            <div className="flex sm:hidden gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
-              {(["anchor", "voiceover"] as const).map(tab => (
-                <button 
-                  key={tab} 
-                  onClick={() => setActiveTab(tab)} 
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase ${activeTab === tab ? "bg-zinc-800 text-white" : "text-zinc-500"}`}
-                >
-                  {tab}
-                </button>
-              ))}
+      {/* Chat Thread Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-8 dark-scroll relative">
+        <div className="max-w-3xl mx-auto space-y-8 pb-32">
+          {chatMessages.map((msg, i) => (
+            <div key={i} className={`flex gap-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+
+              {/* Avatar for Assistant */}
+              {msg.role === "assistant" && (
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-1 shadow-md shadow-blue-900/20">
+                  <SparklesIcon />
+                </div>
+              )}
+
+              <div className={`max-w-[85%] text-sm leading-relaxed ${msg.role === "user" ? "bg-zinc-700 text-white px-5 py-3 rounded-2xl rounded-tr-sm shadow-md" : "text-zinc-200"}`}>
+
+                {/* Regular Message Text / Images */}
+                {msg.imagePreview && <img src={msg.imagePreview} alt="Reference" className="w-48 rounded-lg mb-3 border border-zinc-600 shadow-sm" />}
+
+                {msg.content && (
+                <div className="mb-5 whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-300">
+                  {msg.content}
+                </div>
+              )}
+
+                {/* Script Blocks Generated by AI */}
+                {(msg.anchor || msg.voiceOver) && (
+                  <div className="space-y-4 mt-2">
+
+                    {/* Anchor Block */}
+                    {msg.anchor && (
+                      <div className="bg-[#2f2f2f] border border-zinc-700 rounded-xl overflow-hidden shadow-sm">
+                        <div className="bg-zinc-800/80 px-4 py-2.5 border-b border-zinc-700 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <AnchorIcon /> <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">Anchor Script</span>
+                          </div>
+                          <button onClick={() => copyToClipboard(msg.anchor || "")} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                            <CopyIcon />
+                          </button>
+                        </div>
+                        <div className="p-5 font-['Noto_Sans_Devanagari'] text-base text-zinc-200 whitespace-pre-wrap leading-8">
+                          {renderFormattedText(msg.anchor)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VO Block */}
+                    {msg.voiceOver && scriptType === "long" && (
+                      <div className="bg-[#2f2f2f] border border-zinc-700 rounded-xl overflow-hidden shadow-sm">
+                        <div className="bg-zinc-800/80 px-4 py-2.5 border-b border-zinc-700 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <MicIcon /> <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">Voice Over</span>
+                          </div>
+                          <button onClick={() => copyToClipboard(msg.voiceOver || "")} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                            <CopyIcon />
+                          </button>
+                        </div>
+                        <div className="p-5 font-['Noto_Sans_Devanagari'] text-base text-zinc-200 whitespace-pre-wrap leading-8">
+                          {renderFormattedText(msg.voiceOver)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Suggestions/Critiques */}
+                    {msg.suggestions && (
+                      <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-4 flex gap-3 text-amber-200/90 mt-2">
+                        <div className="mt-0.5"><AlertIcon /></div>
+                        <div>
+                          <h4 className="text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-80">AI Safety & Quality Review</h4>
+                          <p className="text-sm leading-relaxed">{msg.suggestions}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Loading Indicator */}
+          {chatLoading && (
+            <div className="flex gap-4">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center animate-pulse shadow-md shadow-blue-900/20">
+                <SparklesIcon />
+              </div>
+              <div className="text-zinc-400 text-sm mt-1 animate-pulse font-medium">Recompiling narrative flow...</div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      {/* Input Composer Footer */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-[#212121] via-[#212121] to-transparent pt-12 pb-6 px-4">
+        <div className="max-w-3xl mx-auto relative">
+
+          {imagePreview && (
+            <div className="absolute -top-16 left-0 bg-zinc-800 p-1.5 rounded-xl border border-zinc-700 shadow-2xl">
+              <img src={imagePreview} className="h-12 w-12 object-cover rounded-lg" />
+              <button onClick={() => setImagePreview(null)} className="absolute -top-2 -right-2 bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-sm">✕</button>
             </div>
           )}
 
-          {/* Desktop Matrix Layout */}
-          <div className="hidden sm:flex flex-col gap-5">
-            <ScriptBlock label={ "Anchor Script"} icon={<AnchorIcon />} accentColor="border-blue-900/30" value={anchor} onChange={setAnchor} />
-            {scriptType === "long" && (
-              <ScriptBlock label="Voice Over" icon={<MicIcon />} accentColor="border-violet-900/30" value={voiceOver} onChange={setVoiceOver} />
-            )}
-          </div>
+          <div className="flex items-end gap-2 bg-[#2f2f2f] rounded-2xl p-2 border border-zinc-700 focus-within:border-zinc-500 shadow-xl transition-colors">
+            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleImageFile} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={chatLoading}
+              className="p-3 text-zinc-400 hover:text-white hover:bg-zinc-700/50 rounded-xl transition-all mb-0.5"
+            >
+              <PhotoIcon />
+            </button>
 
-          {/* Mobile Display Matrix Only */}
-          <div className="sm:hidden flex-1">
-            {scriptType !== "long" || activeTab === "anchor" ? (
-              <ScriptBlock label="Anchor Content Sequence" icon={<AnchorIcon />} accentColor="border-blue-900/30" value={anchor} onChange={setAnchor} />
-            ) : (
-              <ScriptBlock label="Voice Over Sequence Engine" icon={<MicIcon />} accentColor="border-violet-900/30" value={voiceOver} onChange={setVoiceOver} />
-            )}
-          </div>
-        </div>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendRefinement(); } }}
+              placeholder="Ask the AI to change the tone, rewrite a section, or add new facts..."
+              rows={1}
+              disabled={chatLoading}
+              className="flex-1 bg-transparent text-zinc-100 p-3 outline-none resize-none max-h-32 min-h-[44px] text-sm dark-scroll"
+            />
 
-        {/* Floating Chat Interface */}
-        <div className="w-full xl:w-[400px] xl:flex-shrink-0 h-[480px] xl:h-full pb-2 xl:pb-0">
-          <AIChat onRefine={handleRefine} messages={chatMessages} loading={chatLoading} scriptType={scriptType} />
+            <button
+              onClick={handleSendRefinement}
+              disabled={(!input.trim() && !imagePreview) || chatLoading}
+              className={`p-3 rounded-xl mb-0.5 transition-all ${
+                (input.trim() || imagePreview) && !chatLoading ? "bg-white text-black hover:bg-zinc-200 shadow-md shadow-white/10" : "bg-transparent text-zinc-600"
+              }`}
+            >
+              <SendIcon />
+            </button>
+          </div>
+          <div className="text-center mt-3 text-[11px] text-zinc-500 font-medium">
+            AI edits the script based on your instructions. Press 'Save Script' when satisfied with the final output above.
+          </div>
         </div>
       </div>
     </div>
